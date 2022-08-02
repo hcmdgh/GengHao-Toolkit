@@ -1,35 +1,37 @@
 from .imports import * 
 from .metric import * 
-from .torch_util import * 
-from .recorder import * 
+from .recorder import *
+from .util import * 
+ 
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.neural_network import MLPClassifier
 
 __all__ = [
-    'KNeighbors_multiclass_classification',
-    'xgb_multiclass_classification',
-    'sklearn_multiclass_classification',
-    'mlp_multilabel_classification',
+    # 'KNeighbors_multiclass_classification',
+    # 'xgb_multiclass_classification',
+    # 'sklearn_multiclass_classification',
+    # 'mlp_multilabel_classification',
     'mlp_multiclass_classification',
 ]
 
 
-def mlp_multiclass_classification(
-    *,
-    feat: Union[FloatArray, FloatTensor],
-    label: Union[IntArray, IntTensor],
-    num_layers: Literal[1, 2] = 2, 
-    train_mask: BoolArrayTensor,    
-    val_mask: BoolArrayTensor,    
-    test_mask: BoolArrayTensor,
-    lr: float = 0.001,
-    num_epochs: int = 300,
-    use_tqdm: bool = True,
-) -> tuple[float, float]:
+def mlp_multiclass_classification(*,
+                                  feat: Union[FloatArray, FloatTensor],
+                                  label: Union[IntArray, IntTensor],
+                                  num_layers: Literal[1, 2] = 2, 
+                                  train_mask: BoolArrayTensor,    
+                                  val_mask: BoolArrayTensor,    
+                                  test_mask: BoolArrayTensor,
+                                  lr: float = 0.001,
+                                  num_epochs: int = 300,
+                                  use_tqdm: bool = True) -> tuple[float, float]:
     device = get_device()
 
-    feat = torch.tensor(feat, dtype=torch.float32, device=device)
-    label = torch.tensor(label, dtype=torch.int64, device=device)
+    feat = to_FloatTensor(feat).to(device)
+    label = to_IntTensor(label).to(device)
+    train_mask = to_BoolArray(train_mask)
+    val_mask = to_BoolArray(val_mask)
+    test_mask = to_BoolArray(test_mask)
 
     N, feat_dim = feat.shape 
     assert label.shape == train_mask.shape == val_mask.shape == test_mask.shape == (N,)
@@ -73,8 +75,8 @@ def mlp_multiclass_classification(
             val_pred = model(feat[val_mask])
             test_pred = model(feat[test_mask])
 
-        val_acc = calc_acc(y_pred=val_pred, y_true=label[val_mask])
-        test_acc = calc_acc(y_pred=test_pred, y_true=label[test_mask])
+        val_acc = calc_acc(pred=val_pred, target=label[val_mask])
+        test_acc = calc_acc(pred=test_pred, target=label[test_mask])
         
         recorder.eval(epoch=epoch, val_acc=val_acc, test_acc=test_acc)    
 

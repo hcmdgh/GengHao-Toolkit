@@ -1,9 +1,10 @@
-from ..imports import * 
-from ..pickle_util import * 
+from .imports import * 
+from basic_util import * 
 
-NodeType = str 
-EdgeType = tuple[str, str, str]
-EdgeIndex = tuple[IntTensor, IntTensor]
+__all__ = [
+    'HeteroGraph',
+    'HomoGraph',
+]
 
 
 @dataclass

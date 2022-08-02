@@ -35,6 +35,8 @@ def pickle_load(file_path: str) -> Any:
     
 def torch_dump(obj: Any,
                file_path: str):
+    import torch 
+    
     if file_path.endswith('.gz'):
         with gzip.open(file_path, 'wb') as fp:
             torch.save(obj, fp) 
@@ -45,6 +47,8 @@ def torch_dump(obj: Any,
 
 
 def torch_load(file_path: str) -> Any:
+    import torch 
+    
     if file_path.endswith('.gz'):
         with gzip.open(file_path, 'rb') as fp:
             return torch.load(fp)

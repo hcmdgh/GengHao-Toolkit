@@ -1,6 +1,5 @@
-from ..imports import * 
+from .imports import * 
 from .bean import * 
-from ..pickle_util import * 
 
 __all__ = [
     'save_dgl_graph',

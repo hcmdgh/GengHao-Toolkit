@@ -1,4 +1,4 @@
-from ..imports import * 
+from .imports import * 
 from .dgl_util import * 
 from .bean import * 
 
@@ -187,7 +187,7 @@ def load_HGB_dataset(name: str) -> dgl.DGLHeteroGraph:
         
     elif name == 'Freebase':
         print(_hg)
-        exit() 
+        raise NotImplementedError 
     
     return hg 
 

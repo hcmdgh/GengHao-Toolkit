@@ -1,60 +1,63 @@
 from .imports import * 
+from .util import * 
+
 from sklearn.metrics import f1_score
-from sklearn.metrics import roc_auc_score
 from sklearn.metrics import accuracy_score
 
 __all__ = [
     'calc_f1_micro',
     'calc_f1_macro',
-    'calc_roc_auc_score',
     'calc_acc',
     'calc_cosine_similarity',
 ]
 
 
-def convert_y_true_pred(y_true: Union[IntArray, IntTensor],
-                        y_pred: Union[IntArray, IntTensor, FloatArray, FloatTensor]) -> tuple[IntArray, IntArray]:
-    if isinstance(y_true, Tensor):
-        y_true = y_true.detach().cpu().numpy() 
-    if isinstance(y_pred, Tensor):
-        y_pred = y_pred.detach().cpu().numpy() 
+def calc_f1_micro(pred: FloatArrayTensor,
+                  target: IntArrayTensor) -> float:
+    pred = to_FloatArray(pred)
+    target = to_FloatArray(target)
 
-    if y_pred.ndim > 1:
-        y_pred = np.argmax(y_pred, axis=-1)
-        
-    return y_true, y_pred 
-
-
-def calc_f1_micro(y_true: Union[IntArray, IntTensor],
-                  y_pred: Union[IntArray, IntTensor, FloatArray, FloatTensor]) -> float:
-    y_true, y_pred = convert_y_true_pred(y_true, y_pred)
+    N, num_classes = pred.shape 
+    assert target.shape == (N,)
+    assert np.max(target) < num_classes
+    
+    pred = np.argmax(pred, axis=-1)
                   
-    return f1_score(y_true=y_true, y_pred=y_pred, average='micro')
+    return f1_score(y_true=target, y_pred=pred, average='micro')
 
 
-def calc_f1_macro(y_true: Union[IntArray, IntTensor],
-                  y_pred: Union[IntArray, IntTensor, FloatArray, FloatTensor]) -> float:
-    y_true, y_pred = convert_y_true_pred(y_true, y_pred)
+def calc_f1_macro(pred: FloatArrayTensor,
+                  target: IntArrayTensor) -> float:
+    pred = to_FloatArray(pred)
+    target = to_FloatArray(target)
+
+    N, num_classes = pred.shape 
+    assert target.shape == (N,)
+    assert np.max(target) < num_classes
     
-    return f1_score(y_true=y_true, y_pred=y_pred, average='macro')
+    pred = np.argmax(pred, axis=-1)
+                  
+    return f1_score(y_true=target, y_pred=pred, average='macro')
 
 
-def calc_roc_auc_score(y_true: IntArray,
-                       y_pred: FloatArray) -> float:
-    raise NotImplementedError
-    return roc_auc_score(y_true=y_true, y_score=y_pred)
+def calc_acc(pred: FloatArrayTensor,
+             target: IntArrayTensor) -> float:
+    pred = to_FloatArray(pred)
+    target = to_FloatArray(target)
 
-
-def calc_acc(y_true: IntArrayTensor,
-             y_pred: Union[IntArrayTensor, FloatArrayTensor]) -> float:
-    y_true, y_pred = convert_y_true_pred(y_true, y_pred)
+    N, num_classes = pred.shape 
+    assert target.shape == (N,)
+    assert np.max(target) < num_classes
     
-    return accuracy_score(y_true=y_true, y_pred=y_pred)
+    pred = np.argmax(pred, axis=-1)
+                  
+    return accuracy_score(y_true=target, y_pred=pred)
 
 
 def calc_cosine_similarity(h1: FloatTensor, 
                            h2: FloatTensor) -> FloatTensor:
-    assert h1.shape == h2.shape and h1.ndim == 2 
+    N, emb_dim = h1.shape 
+    assert h2.shape == (N, emb_dim)
                            
     h1 = F.normalize(h1, p=2, dim=-1)
     h2 = F.normalize(h2, p=2, dim=-1)
