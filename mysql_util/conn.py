@@ -7,7 +7,7 @@ class MySQLConnection:
     def __init__(self,
                  *, 
                  host: str,
-                 port: int = 3307, 
+                 port: int = 3306, 
                  user: str,
                  password: str,
                  database: str,
@@ -25,13 +25,6 @@ class MySQLConnection:
         
         self.cursor = self.conn.cursor() 
 
-    # def __del__(self):
-    #     if hasattr(self, 'cursor'):
-    #         self.cursor.__exit__() 
-        
-    #     if hasattr(self, 'conn'):
-    #         self.conn.__exit__()
-        
     def scan_table(self,
                    table_name: str,
                    primary_key: str = 'id', 
