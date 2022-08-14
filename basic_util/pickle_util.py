@@ -15,22 +15,18 @@ def pickle_dump(obj: Any,
     if file_path.endswith('.gz'):
         with gzip.open(file_path, 'wb') as fp:
             pickle.dump(obj, fp) 
-    elif file_path.endswith('.pkl'):
+    else:
         with open(file_path, 'wb') as fp:
             pickle.dump(obj, fp) 
-    else:
-        raise AssertionError 
 
 
 def pickle_load(file_path: str) -> Any:
     if file_path.endswith('.gz'):
         with gzip.open(file_path, 'rb') as fp:
             return pickle.load(fp)
-    elif file_path.endswith('.pkl'):
+    else:
         with open(file_path, 'rb') as fp:
             return pickle.load(fp)
-    else:
-        raise AssertionError 
     
     
 def torch_dump(obj: Any,

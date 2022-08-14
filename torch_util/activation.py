@@ -15,6 +15,8 @@ def get_activation_func(act: Union[str, Callable]) -> Callable:
         return nn.ReLU() 
     elif act == 'sigmoid':
         return nn.Sigmoid() 
+    elif act == 'tanh':
+        return nn.Tanh()
     elif act == 'leakyrelu':
         return nn.LeakyReLU() 
     elif act == 'prelu':
