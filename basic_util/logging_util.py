@@ -7,37 +7,32 @@ __all__ = [
     'log_error',
 ]
 
-_has_init_log = False 
+_use_stdout = True 
+_log_fp = None 
 
 
 def init_log(log_path: Optional[str] = './log.log',
              stdout: bool = True):
-    global _has_init_log
+    global _use_stdout, _log_fp
     
-    if _has_init_log:
-        return
-    
-    _has_init_log = True  
-             
-    handlers = []
-             
     if log_path:
-        handlers.append(logging.FileHandler(log_path, 'w', encoding='utf-8'))
+        _log_fp = open(log_path, 'w', encoding='utf-8')
+    else:
+        _log_fp = None 
+        
+    _use_stdout = stdout
+
     
-    if stdout:
-        handlers.append(logging.StreamHandler())
-    
-    logging.basicConfig(
-        format = '%(asctime)s [%(levelname)s] %(message)s',
-        datefmt = '%Y-%m-%d %H:%M:%S',
-        handlers = handlers,
-        level = logging.INFO,
-    )
+def _log(content: str,
+         level: str):
+
+         
+    if _use_stdout:
+        print()
 
 
 def log_info(content: str):
-    init_log()
-    logging.info(content)
+    pass 
     
     
 def log_warning(content: str):
