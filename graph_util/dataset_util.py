@@ -2,7 +2,7 @@ from .imports import *
 from .dgl_util import * 
 from .bean import * 
 
-from torch_geometric.datasets import CitationFull, DBLP, IMDB, AMiner, Yelp, CoraFull, Coauthor, MovieLens, HGBDataset, Planetoid
+from torch_geometric.datasets import CitationFull, DBLP, IMDB, AMiner, Yelp, CoraFull, Coauthor, MovieLens, HGBDataset, Planetoid, Reddit
 from ogb.nodeproppred import PygNodePropPredDataset
 
 __all__ = ['load_graph_dataset']
@@ -36,6 +36,29 @@ def load_Planetoid_dataset(name: str) -> dgl.DGLGraph:
     dataset = Planetoid(
         root = os.path.join(root, 'PyG/Planetoid'),
         name = name,
+    )
+    
+    _g = dataset[0]
+    feat = _g.x 
+    label = _g.y 
+    edge_index = tuple(_g.edge_index)
+    train_mask = _g.train_mask
+    val_mask = _g.val_mask
+    test_mask = _g.test_mask
+    
+    g = dgl.graph(edge_index)
+    g.ndata['feat'] = feat 
+    g.ndata['label'] = label
+    g.ndata['train_mask'] = train_mask
+    g.ndata['val_mask'] = val_mask
+    g.ndata['test_mask'] = test_mask
+    
+    return g 
+
+
+def load_Reddit_dataset() -> dgl.DGLGraph:
+    dataset = Reddit(
+        root = os.path.join(root, 'PyG/Reddit'),
     )
     
     _g = dataset[0]
@@ -491,6 +514,8 @@ def load_graph_dataset(dataset_name: str,
         g = load_Planetoid_dataset('CiteSeer')
     elif dataset_name == 'pubmed':
         g = load_Planetoid_dataset('PubMed')
+    elif dataset_name == 'reddit':
+        g = load_Reddit_dataset()
     elif dataset_name == 'heco-acm':
         g = load_HeCo_dataset('ACM')
     elif dataset_name == 'heco-freebase':

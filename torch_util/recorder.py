@@ -15,7 +15,7 @@ class ClassificationRecorder:
         self.val_acc_dict: dict[int, float] = dict()
         self.test_acc_dict: dict[int, float] = dict()
         
-    def get_best_val_acc(self) -> tuple[int, float]:
+    def _get_best_val_acc(self) -> tuple[int, float]:
         val_acc_list = sorted(self.val_acc_dict.items(), key=lambda x: (-x[1], x[0]))
         best_val_acc_epoch, best_val_acc = val_acc_list[0]
 
@@ -53,7 +53,7 @@ class ClassificationRecorder:
         self.val_acc_dict[epoch] = val_acc 
         self.test_acc_dict[epoch] = test_acc 
 
-        best_val_acc_epoch, best_val_acc = self.get_best_val_acc()
+        best_val_acc_epoch, best_val_acc = self._get_best_val_acc()
         
         if self.use_log:
             logging.info(f"epoch: {epoch}, val_acc: {val_acc:.4f} (best: {best_val_acc:.4f} in epoch {best_val_acc_epoch}), test_acc: {test_acc:.4f}")
@@ -68,7 +68,7 @@ class ClassificationRecorder:
             )
 
     def summary(self) -> tuple[float, int, float]:
-        best_val_acc_epoch, best_val_acc = self.get_best_val_acc()
+        best_val_acc_epoch, best_val_acc = self._get_best_val_acc()
         test_acc = self.test_acc_dict[best_val_acc_epoch]
         
         if self.use_wandb_log:
