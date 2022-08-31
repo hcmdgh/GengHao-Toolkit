@@ -1,4 +1,5 @@
 from .imports import * 
+from basic_util import * 
 
 __all__ = [
     'ClassificationRecorder',
@@ -32,10 +33,10 @@ class ClassificationRecorder:
         
         if self.use_log and not mute:
             if not other_loss_dict:
-                logging.info(f"epoch: {epoch}, loss: {loss:.4f}")
+                log_info(f"epoch: {epoch}, loss: {loss:.4f}")
             else:
                 other_loss_info = ', '.join(f"{k}: {v:.4f}" for k, v in other_loss_dict.items())
-                logging.info(f"epoch: {epoch}, loss: {loss:.4f}, {other_loss_info}")
+                log_info(f"epoch: {epoch}, loss: {loss:.4f}, {other_loss_info}")
             
         all_loss_dict = { 'loss': loss }
         all_loss_dict.update(other_loss_dict)
@@ -56,7 +57,7 @@ class ClassificationRecorder:
         best_val_acc_epoch, best_val_acc = self._get_best_val_acc()
         
         if self.use_log:
-            logging.info(f"epoch: {epoch}, val_acc: {val_acc:.4f} (best: {best_val_acc:.4f} in epoch {best_val_acc_epoch}), test_acc: {test_acc:.4f}")
+            log_info(f"epoch: {epoch}, val_acc: {val_acc:.4f} (best: {best_val_acc:.4f} in epoch {best_val_acc_epoch}), test_acc: {test_acc:.4f}")
             
         if self.use_wandb_log:
             wandb.log(

@@ -1,4 +1,5 @@
 from .imports import * 
+from .datetime_util import *
 
 __all__ = [
     'init_log', 
@@ -25,21 +26,22 @@ def init_log(log_path: Optional[str] = './log.log',
     
 def _log(content: str,
          level: str):
-
+    msg = f"{datetime2str(datetime.now())} [{level}] {content}"
          
     if _use_stdout:
-        print()
+        print(msg, flush=True)
+        
+    if _log_fp is not None:
+        print(msg, file=_log_fp, flush=True)
 
 
 def log_info(content: str):
-    pass 
+    _log(content, 'INFO')
     
     
 def log_warning(content: str):
-    init_log()
-    logging.warning(content)
+    _log(content, 'WARNING')
     
     
 def log_error(content: str):
-    init_log()
-    logging.error(content)
+    _log(content, 'ERROR')
