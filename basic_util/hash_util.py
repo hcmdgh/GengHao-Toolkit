@@ -2,6 +2,7 @@ from .str_util import *
 
 import hashlib 
 import random 
+from typing import Any 
 
 __all__ = [
     'hash_by_SHA256',
@@ -9,6 +10,7 @@ __all__ = [
     'hash_by_MD5',
     'hash_password',
     'verify_password',
+    'hash_obj', 
 ]
 
 
@@ -50,3 +52,10 @@ def verify_password(password: str,
     salted = password + salt + password + salt 
     
     return hash_by_SHA256(salted.encode()) == sha256 
+
+
+def hash_obj(obj: Any) -> str:
+    raise NotImplementedError
+    
+    if isinstance(obj, str):
+        _bytes = obj.encode(encoding='utf-8')

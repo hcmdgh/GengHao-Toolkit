@@ -1,31 +1,57 @@
 from .imports import * 
 from .bean import * 
 
+from basic_util import * 
+
 __all__ = [
     'save_dgl_graph',
     'load_dgl_graph', 
     'get_edge_index',
-    'hash_graph',
+    'hash_graph', 
 ]
 
 
-def hash_graph():
-    raise NotImplementedError
+def hash_graph(g: dgl.DGLGraph) -> str:
+    edge_index = get_edge_index(g, format='pyg', return_numpy=True)
+    
+    if isinstance(edge_index, IntArray):
+        _bytes = edge_index.tobytes()
+    elif isinstance(edge_index, dict):
+        items = sorted(edge_index.items()) 
+        _bytes = bytes() 
+
+        for _, _edge_index in items:
+            _bytes += _edge_index.tobytes() 
+    else:
+        raise AssertionError 
+    
+    return hash_by_SHA1(_bytes)
 
 
 def get_edge_index(g: dgl.DGLGraph,
-                   format: str):
+                   format: str = 'dgl',
+                   return_numpy: bool = False):
     format = format.lower().strip() 
                    
     if g.is_homogeneous:
         edge_index = g.edges() 
         
         if format == 'dgl':
-            return edge_index 
+            pass  
         elif format == 'pyg':
-            return torch.stack(edge_index)
+            edge_index = torch.stack(edge_index)
         else:
             raise AssertionError 
+
+        if return_numpy:
+            if isinstance(edge_index, tuple):
+                edge_index = (edge_index[0].cpu().numpy(), edge_index[1].cpu().numpy())
+            elif isinstance(edge_index, IntTensor):
+                edge_index = edge_index.cpu().numpy() 
+            else:
+                raise AssertionError 
+        
+        return edge_index
     else:
         edge_index_dict = {} 
         
@@ -38,6 +64,17 @@ def get_edge_index(g: dgl.DGLGraph,
                 edge_index_dict[etype] = torch.stack(edge_index)
             else:
                 raise AssertionError 
+
+        if return_numpy:
+            for etype, edge_index in edge_index_dict.items():
+                if isinstance(edge_index, tuple):
+                    edge_index = (edge_index[0].cpu().numpy(), edge_index[1].cpu().numpy())
+                elif isinstance(edge_index, IntTensor):
+                    edge_index = edge_index.cpu().numpy() 
+                else:
+                    raise AssertionError 
+                
+                edge_index_dict[etype] = edge_index 
             
         return edge_index_dict
 

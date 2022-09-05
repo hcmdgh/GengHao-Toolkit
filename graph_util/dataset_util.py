@@ -2,6 +2,7 @@ from .imports import *
 from .dgl_util import * 
 from .bean import * 
 
+from basic_util import * 
 from torch_geometric.datasets import CitationFull, DBLP, IMDB, AMiner, Yelp, CoraFull, Coauthor, MovieLens, HGBDataset, Planetoid, Reddit
 from ogb.nodeproppred import PygNodePropPredDataset
 
@@ -212,6 +213,20 @@ def load_HGB_dataset(name: str) -> dgl.DGLHeteroGraph:
         print(_hg)
         raise NotImplementedError 
     
+    return hg 
+
+
+def load_ogbn_mag_with_TransE() -> dgl.DGLHeteroGraph:
+    hg = load_OGB_dataset('ogbn-mag')
+    
+    node_feat_path = os.path.join(root, 'OGB/ogbn-mag_TransE/node_feat.pt')
+    node_feat_dict = torch_load(node_feat_path)
+    
+    hg.nodes['paper'].data['feat'] = node_feat_dict['paper']
+    hg.nodes['author'].data['feat'] = node_feat_dict['author']
+    hg.nodes['field'].data['feat'] = node_feat_dict['field_feat']
+    hg.nodes['institution'].data['feat'] = node_feat_dict['institution']
+
     return hg 
 
 
@@ -494,6 +509,8 @@ def load_graph_dataset(dataset_name: str,
         g = load_MovieLens_dataset()
     elif dataset_name == 'ogbn-mag':
         g = load_OGB_dataset('ogbn-mag')
+    elif dataset_name == 'ogbn-mag_transe':
+        g = load_ogbn_mag_with_TransE()
     elif dataset_name == 'ogbn-arxiv':
         g = load_OGB_dataset('ogbn-arxiv')
     elif dataset_name == 'ogbn-products':
