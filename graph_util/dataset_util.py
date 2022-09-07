@@ -527,6 +527,46 @@ def load_IMDB_dataset() -> dgl.DGLHeteroGraph:
     return hg 
 
 
+def load_AMiner_dataset() -> dgl.DGLHeteroGraph:
+    dataset = AMiner(root=os.path.join(root, 'PyG/AMiner'))
+
+    _hg = dataset[0] 
+    
+    num_author_nodes = _hg['author'].num_nodes
+    num_venue_nodes = _hg['venue'].num_nodes
+    num_paper_nodes = _hg['paper'].num_nodes
+
+    _author_label = _hg['author'].y 
+    _venue_label = _hg['venue'].y 
+    author_label_nids = _hg['author'].y_index 
+    venue_label_nids = _hg['venue'].y_index 
+    
+    author_label = torch.full(size=[num_author_nodes], fill_value=-1, dtype=torch.int64)
+    author_label[author_label_nids] = _author_label
+    venue_label = torch.full(size=[num_venue_nodes], fill_value=-1, dtype=torch.int64)
+    venue_label[venue_label_nids] = _venue_label
+    
+    pa_edge_index = tuple(_hg.edge_index_dict[('paper', 'written_by', 'author')])
+    ap_edge_index = tuple(_hg.edge_index_dict[('author', 'writes', 'paper')])
+    pv_edge_index = tuple(_hg.edge_index_dict[('paper', 'published_in', 'venue')])
+    vp_edge_index = tuple(_hg.edge_index_dict[('venue', 'publishes', 'paper')])
+    
+    hg = dgl.heterograph(
+        {
+            ('paper', 'pa', 'author'): pa_edge_index,
+            ('author', 'ap', 'paper'): ap_edge_index,
+            ('paper', 'pv', 'venue'): pv_edge_index,
+            ('venue', 'vp', 'paper'): vp_edge_index,
+        },
+        num_nodes_dict = {'author': num_author_nodes, 'venue': num_venue_nodes, 'paper': num_paper_nodes},
+    )
+    
+    hg.nodes['author'].data['label'] = author_label
+    hg.nodes['venue'].data['label'] = venue_label
+    
+    return hg 
+
+
 def load_graph_dataset(dataset_name: str,
                        format: str = 'dgl') -> Union[dgl.DGLGraph, pygdata.HeteroData]:
     dataset_name = dataset_name.lower().strip() 
@@ -582,6 +622,8 @@ def load_graph_dataset(dataset_name: str,
         g = load_HeCo_dataset('Freebase')
     elif dataset_name == 'acm_transe':
         g = load_ACM_TransE_dataset()
+    elif dataset_name == 'aminer':
+        g = load_AMiner_dataset()
     else:
         raise AssertionError 
 
