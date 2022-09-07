@@ -3,7 +3,7 @@ from .dgl_util import *
 from .bean import * 
 
 from basic_util import * 
-from torch_geometric.datasets import CitationFull, DBLP, IMDB, AMiner, Yelp, CoraFull, Coauthor, MovieLens, HGBDataset, Planetoid, Reddit
+from torch_geometric.datasets import CitationFull, DBLP, IMDB, AMiner, Yelp, CoraFull, Coauthor, MovieLens, HGBDataset, Planetoid, Reddit, OGB_MAG
 from ogb.nodeproppred import PygNodePropPredDataset
 
 __all__ = ['load_graph_dataset']
@@ -22,6 +22,29 @@ for _root in ROOT_CANDIDATES:
         break 
 else:
     raise RuntimeError('数据集根目录不存在！')
+
+
+def load_ACM_TransE_dataset() -> dgl.DGLHeteroGraph:
+    hg_info = torch.load(os.path.join(root, 'NARS/ACM.pt'))
+    
+    hg = dgl.heterograph(
+        hg_info['edge_index_dict'],
+        num_nodes_dict = {
+            'paper': hg_info['num_paper_nodes'],
+            'author': hg_info['num_author_nodes'],
+            'field': hg_info['num_field_nodes'],
+        },
+    )
+    
+    hg.nodes['paper'].data['feat'] = hg_info['paper_feat']
+    hg.nodes['author'].data['feat'] = hg_info['author_feat']
+    hg.nodes['field'].data['feat'] = hg_info['field_feat']
+    hg.nodes['paper'].data['label'] = hg_info['paper_label']
+    hg.nodes['paper'].data['train_mask'] = hg_info['paper_train_mask']
+    hg.nodes['paper'].data['val_mask'] = hg_info['paper_val_mask']
+    hg.nodes['paper'].data['test_mask'] = hg_info['paper_test_mask']
+
+    return hg 
 
 
 def load_HeCo_dataset(name: str) -> dgl.DGLHeteroGraph:
@@ -219,13 +242,31 @@ def load_HGB_dataset(name: str) -> dgl.DGLHeteroGraph:
 def load_ogbn_mag_with_TransE() -> dgl.DGLHeteroGraph:
     hg = load_OGB_dataset('ogbn-mag')
     
-    node_feat_path = os.path.join(root, 'OGB/ogbn-mag_TransE/node_feat.pt')
-    node_feat_dict = torch_load(node_feat_path)
+    hg_pyg = OGB_MAG(
+        root = os.path.join(root, 'PyG/ogbn-mag'), 
+        preprocess = 'TransE',
+    ).data 
     
-    hg.nodes['paper'].data['feat'] = node_feat_dict['paper']
-    hg.nodes['author'].data['feat'] = node_feat_dict['author']
-    hg.nodes['field'].data['feat'] = node_feat_dict['field_feat']
-    hg.nodes['institution'].data['feat'] = node_feat_dict['institution']
+    hg.nodes['paper'].data['feat'] = hg_pyg['paper'].x
+    hg.nodes['author'].data['feat'] = hg_pyg['author'].x
+    hg.nodes['field'].data['feat'] = hg_pyg['field_of_study'].x
+    hg.nodes['institution'].data['feat'] = hg_pyg['institution'].x
+
+    return hg 
+
+
+def load_ogbn_mag_with_Metapath2Vec() -> dgl.DGLHeteroGraph:
+    hg = load_OGB_dataset('ogbn-mag')
+    
+    hg_pyg = OGB_MAG(
+        root = os.path.join(root, 'PyG/ogbn-mag'), 
+        preprocess = 'metapath2vec',
+    ).data 
+    
+    hg.nodes['paper'].data['feat'] = hg_pyg['paper'].x
+    hg.nodes['author'].data['feat'] = hg_pyg['author'].x
+    hg.nodes['field'].data['feat'] = hg_pyg['field_of_study'].x
+    hg.nodes['institution'].data['feat'] = hg_pyg['institution'].x
 
     return hg 
 
@@ -511,6 +552,8 @@ def load_graph_dataset(dataset_name: str,
         g = load_OGB_dataset('ogbn-mag')
     elif dataset_name == 'ogbn-mag_transe':
         g = load_ogbn_mag_with_TransE()
+    elif dataset_name == 'ogbn-mag_metapath2vec':
+        g = load_ogbn_mag_with_Metapath2Vec()
     elif dataset_name == 'ogbn-arxiv':
         g = load_OGB_dataset('ogbn-arxiv')
     elif dataset_name == 'ogbn-products':
@@ -537,6 +580,8 @@ def load_graph_dataset(dataset_name: str,
         g = load_HeCo_dataset('ACM')
     elif dataset_name == 'heco-freebase':
         g = load_HeCo_dataset('Freebase')
+    elif dataset_name == 'acm_transe':
+        g = load_ACM_TransE_dataset()
     else:
         raise AssertionError 
 
