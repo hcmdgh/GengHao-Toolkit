@@ -46,6 +46,14 @@ class ClassificationRecorder:
                 all_loss_dict, 
                 step = epoch,
             )
+            
+    def eval_step(self,
+                  epoch: int,
+                  step: int,
+                  val_acc: float,
+                  test_acc: float):
+        if self.use_log:
+            log_info(f"epoch: {epoch}, step: {step}, val_acc: {val_acc:.4f}, test_acc: {test_acc:.4f}")
     
     def eval(self,
              epoch: int, 

@@ -6,7 +6,12 @@ from basic_util import *
 from torch_geometric.datasets import CitationFull, DBLP, IMDB, AMiner, Yelp, CoraFull, Coauthor, MovieLens, HGBDataset, Planetoid, Reddit, OGB_MAG
 from ogb.nodeproppred import PygNodePropPredDataset
 
-__all__ = ['load_graph_dataset']
+__all__ = [
+    'load_graph_dataset',
+    'load_HeCo_ACM_hg',
+    'load_HeCo_DBLP_hg',
+    'load_HeCo_AMiner_hg',
+]
 
 ROOT_CANDIDATES = [
     '/Dataset',
@@ -22,6 +27,206 @@ for _root in ROOT_CANDIDATES:
         break 
 else:
     raise RuntimeError('数据集根目录不存在！')
+
+
+def load_HeCo_AMiner_hg() -> dgl.DGLHeteroGraph:
+    _label = np.load(os.path.join(root, 'HeCo/AMiner/labels.npy')).astype('int32')
+    _pa = np.load(os.path.join(root, 'HeCo/AMiner/nei_a.npy'), allow_pickle=True)
+    _pr = np.load(os.path.join(root, 'HeCo/AMiner/nei_r.npy'), allow_pickle=True)
+    _train = np.load(os.path.join(root, 'HeCo/AMiner/train_20.npy'))
+    _test = np.load(os.path.join(root, 'HeCo/AMiner/test_20.npy')) 
+    _val = np.load(os.path.join(root, 'HeCo/AMiner/val_20.npy'))
+
+    num_nodes_dict = { 'paper': 6564, 'author': 13329, 'reference': 35890 }
+    label = torch.tensor(_label, dtype=torch.int64)
+    assert label.shape == (num_nodes_dict['paper'],)
+    
+    train_nids = torch.tensor(_train, dtype=torch.int64)
+    assert train_nids.shape == (80,)
+    val_nids = torch.tensor(_val, dtype=torch.int64)
+    assert val_nids.shape == (1000,)
+    test_nids = torch.tensor(_test, dtype=torch.int64)
+    assert test_nids.shape == (1000,)
+    train_mask = torch.zeros(num_nodes_dict['paper'], dtype=torch.bool)
+    val_mask = torch.zeros(num_nodes_dict['paper'], dtype=torch.bool)
+    test_mask = torch.zeros(num_nodes_dict['paper'], dtype=torch.bool)
+    train_mask[train_nids] = True
+    val_mask[val_nids] = True
+    test_mask[test_nids] = True
+    
+    pa_edge_list = [] 
+
+    for paper_nid, author_nids in enumerate(_pa):
+        for author_nid in author_nids:
+            paper_nid, author_nid = int(paper_nid), int(author_nid)
+            pa_edge_list.append((paper_nid, author_nid))
+            
+    pa_edge_index = tuple(torch.tensor(pa_edge_list, dtype=torch.int64).T)
+
+    pr_edge_list = [] 
+
+    for paper_nid, ref_nids in enumerate(_pr):
+        for ref_nid in ref_nids:
+            paper_nid, ref_nid = int(paper_nid), int(ref_nid)
+            pr_edge_list.append((paper_nid, ref_nid))
+            
+    pr_edge_index = tuple(torch.tensor(pr_edge_list, dtype=torch.int64).T)
+
+    hg = dgl.heterograph(
+        {
+            ('paper', 'pa', 'author'): pa_edge_index,
+            ('paper', 'pr', 'reference'): pr_edge_index,
+            ('author', 'ap', 'paper'): pa_edge_index[::-1],
+            ('reference', 'rp', 'paper'): pr_edge_index[::-1],
+        },
+        num_nodes_dict = num_nodes_dict, 
+    )
+    
+    hg.nodes['paper'].data['label'] = label
+    hg.nodes['paper'].data['train_mask'] = train_mask
+    hg.nodes['paper'].data['val_mask'] = val_mask
+    hg.nodes['paper'].data['test_mask'] = test_mask
+
+    return hg 
+
+    
+def load_HeCo_ACM_hg() -> dgl.DGLHeteroGraph:
+    _label = np.load(os.path.join(root, 'HeCo/ACM/labels.npy')).astype('int32')
+    _pa = np.load(os.path.join(root, 'HeCo/ACM/nei_a.npy'), allow_pickle=True)
+    _ps = np.load(os.path.join(root, 'HeCo/ACM/nei_s.npy'), allow_pickle=True)
+    _feat = sp.load_npz(os.path.join(root, 'HeCo/ACM/p_feat.npz'))
+    _train = np.load(os.path.join(root, 'HeCo/ACM/train_20.npy'))
+    _test = np.load(os.path.join(root, 'HeCo/ACM/test_20.npy')) 
+    _val = np.load(os.path.join(root, 'HeCo/ACM/val_20.npy'))
+
+    num_nodes_dict = { 'paper': 4019, 'author': 7167, 'subject': 60 }
+    feat_dim = 1902
+    label = torch.tensor(_label, dtype=torch.int64)
+    assert label.shape == (num_nodes_dict['paper'],)
+    feat = torch.tensor(_feat.toarray(), dtype=torch.float32)
+    assert feat.shape == (num_nodes_dict['paper'], feat_dim)
+    
+    train_nids = torch.tensor(_train, dtype=torch.int64)
+    assert train_nids.shape == (60,)
+    val_nids = torch.tensor(_val, dtype=torch.int64)
+    assert val_nids.shape == (1000,)
+    test_nids = torch.tensor(_test, dtype=torch.int64)
+    assert test_nids.shape == (1000,)
+    train_mask = torch.zeros(num_nodes_dict['paper'], dtype=torch.bool)
+    val_mask = torch.zeros(num_nodes_dict['paper'], dtype=torch.bool)
+    test_mask = torch.zeros(num_nodes_dict['paper'], dtype=torch.bool)
+    train_mask[train_nids] = True
+    val_mask[val_nids] = True
+    test_mask[test_nids] = True
+    
+    pa_edge_list = [] 
+
+    for paper_nid, author_nids in enumerate(_pa):
+        for author_nid in author_nids:
+            paper_nid, author_nid = int(paper_nid), int(author_nid)
+            pa_edge_list.append((paper_nid, author_nid))
+            
+    pa_edge_index = tuple(torch.tensor(pa_edge_list, dtype=torch.int64).T)
+
+    ps_edge_list = [] 
+
+    for paper_nid, subject_nids in enumerate(_ps):
+        for subject_nid in subject_nids:
+            paper_nid, subject_nid = int(paper_nid), int(subject_nid)
+            ps_edge_list.append((paper_nid, subject_nid))
+            
+    ps_edge_index = tuple(torch.tensor(ps_edge_list, dtype=torch.int64).T)
+
+    hg = dgl.heterograph(
+        {
+            ('paper', 'pa', 'author'): pa_edge_index,
+            ('paper', 'ps', 'subject'): ps_edge_index,
+            ('author', 'ap', 'paper'): pa_edge_index[::-1],
+            ('subject', 'sp', 'paper'): ps_edge_index[::-1],
+        },
+        num_nodes_dict = num_nodes_dict, 
+    )
+    
+    hg.nodes['paper'].data['label'] = label
+    hg.nodes['paper'].data['feat'] = feat
+    hg.nodes['paper'].data['train_mask'] = train_mask
+    hg.nodes['paper'].data['val_mask'] = val_mask
+    hg.nodes['paper'].data['test_mask'] = test_mask
+
+    return hg 
+
+
+def load_HeCo_DBLP_hg() -> dgl.DGLHeteroGraph:
+    _label = np.load(os.path.join(root, 'HeCo/DBLP/labels.npy')).astype('int32')
+    _feat = sp.load_npz(os.path.join(root, 'HeCo/DBLP/a_feat.npz'))
+    _train = np.load(os.path.join(root, 'HeCo/ACM/train_20.npy'))
+    _test = np.load(os.path.join(root, 'HeCo/ACM/test_20.npy')) 
+    _val = np.load(os.path.join(root, 'HeCo/ACM/val_20.npy'))
+    
+    pa_edge_list = [] 
+    
+    with open(os.path.join(root, 'HeCo/DBLP/pa.txt'), encoding='utf-8') as fp:
+        for line in fp:
+            paper_nid, author_nid = map(int, line.split())
+            pa_edge_list.append((paper_nid, author_nid))
+
+    pc_edge_list = [] 
+    
+    with open(os.path.join(root, 'HeCo/DBLP/pc.txt'), encoding='utf-8') as fp:
+        for line in fp:
+            paper_nid, conference_nid = map(int, line.split())
+            pc_edge_list.append((paper_nid, conference_nid))
+            
+    pt_edge_list = [] 
+    
+    with open(os.path.join(root, 'HeCo/DBLP/pt.txt'), encoding='utf-8') as fp:
+        for line in fp:
+            paper_nid, term_nid = map(int, line.split())
+            pt_edge_list.append((paper_nid, term_nid))
+            
+    pa_edge_index = tuple(torch.tensor(pa_edge_list, dtype=torch.int64).T)
+    pc_edge_index = tuple(torch.tensor(pc_edge_list, dtype=torch.int64).T)
+    pt_edge_index = tuple(torch.tensor(pt_edge_list, dtype=torch.int64).T)
+    
+    num_nodes_dict = { 'author': 4057, 'paper': 14328, 'term': 7723, 'conference': 20 }
+    feat_dim = 334
+    label = torch.tensor(_label, dtype=torch.int64)
+    assert label.shape == (num_nodes_dict['author'],)
+    feat = torch.tensor(_feat.toarray(), dtype=torch.float32)
+    assert feat.shape == (num_nodes_dict['author'], feat_dim)
+    
+    train_nids = torch.tensor(_train, dtype=torch.int64)
+    assert train_nids.shape == (60,)
+    val_nids = torch.tensor(_val, dtype=torch.int64)
+    assert val_nids.shape == (1000,)
+    test_nids = torch.tensor(_test, dtype=torch.int64)
+    assert test_nids.shape == (1000,)
+    train_mask = torch.zeros(num_nodes_dict['author'], dtype=torch.bool)
+    val_mask = torch.zeros(num_nodes_dict['author'], dtype=torch.bool)
+    test_mask = torch.zeros(num_nodes_dict['author'], dtype=torch.bool)
+    train_mask[train_nids] = True
+    val_mask[val_nids] = True
+    test_mask[test_nids] = True
+            
+    hg = dgl.heterograph(
+        {
+            ('paper', 'pa', 'author'): pa_edge_index,
+            ('paper', 'pc', 'conference'): pc_edge_index,
+            ('paper', 'pt', 'term'): pt_edge_index,
+            ('author', 'ap', 'paper'): pa_edge_index[::-1],
+            ('conference', 'cp', 'paper'): pc_edge_index[::-1],
+            ('term', 'tp', 'paper'): pt_edge_index[::-1],
+        },
+        num_nodes_dict = num_nodes_dict, 
+    )
+    
+    hg.nodes['author'].data['label'] = label
+    hg.nodes['author'].data['feat'] = feat
+    hg.nodes['author'].data['train_mask'] = train_mask
+    hg.nodes['author'].data['val_mask'] = val_mask
+    hg.nodes['author'].data['test_mask'] = test_mask
+    
+    return hg 
 
 
 def load_ACM_TransE_dataset() -> dgl.DGLHeteroGraph:
@@ -45,15 +250,6 @@ def load_ACM_TransE_dataset() -> dgl.DGLHeteroGraph:
     hg.nodes['paper'].data['test_mask'] = hg_info['paper_test_mask']
 
     return hg 
-
-
-def load_HeCo_dataset(name: str) -> dgl.DGLHeteroGraph:
-    if name == 'ACM':
-        return load_dgl_graph(os.path.join(root, 'HeCo/ACM/ACM.pt'))
-    elif name == 'Freebase':
-        return load_dgl_graph(os.path.join(root, 'HeCo/Freebase/Freebase.pt'))
-    else:
-        raise AssertionError 
 
 
 def load_Planetoid_dataset(name: str) -> dgl.DGLGraph:
@@ -436,10 +632,6 @@ def load_Yelp_dataset() -> dgl.DGLGraph:
     return g 
 
 
-def load_AMiner_dataset() -> dgl.DGLGraph:
-    raise NotImplementedError
-
-
 def load_DBLP_dataset(homo_or_hetero: bool) -> dgl.DGLGraph:
     if homo_or_hetero:
         dataset = CitationFull(
@@ -527,7 +719,7 @@ def load_IMDB_dataset() -> dgl.DGLHeteroGraph:
     return hg 
 
 
-def load_AMiner_dataset() -> dgl.DGLHeteroGraph:
+def load_AMiner_dataset(train_val_test_ratio: tuple[float, float, float]) -> dgl.DGLHeteroGraph:
     dataset = AMiner(root=os.path.join(root, 'PyG/AMiner'))
 
     _hg = dataset[0] 
@@ -538,13 +730,38 @@ def load_AMiner_dataset() -> dgl.DGLHeteroGraph:
 
     _author_label = _hg['author'].y 
     _venue_label = _hg['venue'].y 
-    author_label_nids = _hg['author'].y_index 
-    venue_label_nids = _hg['venue'].y_index 
+    _author_label_nids = _hg['author'].y_index 
+    _venue_label_nids = _hg['venue'].y_index 
     
-    author_label = torch.full(size=[num_author_nodes], fill_value=-1, dtype=torch.int64)
-    author_label[author_label_nids] = _author_label
-    venue_label = torch.full(size=[num_venue_nodes], fill_value=-1, dtype=torch.int64)
-    venue_label[venue_label_nids] = _venue_label
+    author_label = torch.zeros(num_author_nodes, dtype=torch.int64)
+    author_label[_author_label_nids] = _author_label
+    venue_label = torch.zeros(num_venue_nodes, dtype=torch.int64)
+    venue_label[_venue_label_nids] = _venue_label
+    
+    # [BEGIN] 划分训练集测试集
+    train_ratio, val_ratio, test_ratio = train_val_test_ratio
+    assert math.isclose(train_ratio + val_ratio + test_ratio, 1.)
+    
+    perm = np.random.permutation(len(_author_label_nids))
+    train_cnt = int(train_ratio * len(_author_label_nids))
+    val_cnt = int(val_ratio * len(_author_label_nids))
+    author_train_mask = torch.zeros(num_author_nodes, dtype=torch.bool)
+    author_val_mask = torch.zeros(num_author_nodes, dtype=torch.bool)
+    author_test_mask = torch.zeros(num_author_nodes, dtype=torch.bool)
+    author_train_mask[_author_label_nids[perm[:train_cnt]]] = True 
+    author_val_mask[_author_label_nids[perm[train_cnt:train_cnt+val_cnt]]] = True 
+    author_test_mask[_author_label_nids[perm[train_cnt+val_cnt:]]] = True 
+    
+    perm = np.random.permutation(len(_venue_label_nids))
+    train_cnt = int(train_ratio * len(_venue_label_nids))
+    val_cnt = int(val_ratio * len(_venue_label_nids))
+    venue_train_mask = torch.zeros(num_venue_nodes, dtype=torch.bool)
+    venue_val_mask = torch.zeros(num_venue_nodes, dtype=torch.bool)
+    venue_test_mask = torch.zeros(num_venue_nodes, dtype=torch.bool)
+    venue_train_mask[_venue_label_nids[perm[:train_cnt]]] = True 
+    venue_val_mask[_venue_label_nids[perm[train_cnt:train_cnt+val_cnt]]] = True 
+    venue_test_mask[_venue_label_nids[perm[train_cnt+val_cnt:]]] = True 
+    # [END]
     
     pa_edge_index = tuple(_hg.edge_index_dict[('paper', 'written_by', 'author')])
     ap_edge_index = tuple(_hg.edge_index_dict[('author', 'writes', 'paper')])
@@ -563,12 +780,20 @@ def load_AMiner_dataset() -> dgl.DGLHeteroGraph:
     
     hg.nodes['author'].data['label'] = author_label
     hg.nodes['venue'].data['label'] = venue_label
+
+    hg.nodes['author'].data['train_mask'] = author_train_mask
+    hg.nodes['author'].data['val_mask'] = author_val_mask
+    hg.nodes['author'].data['test_mask'] = author_test_mask
+    hg.nodes['venue'].data['train_mask'] = venue_train_mask
+    hg.nodes['venue'].data['val_mask'] = venue_val_mask
+    hg.nodes['venue'].data['test_mask'] = venue_test_mask
     
     return hg 
 
 
 def load_graph_dataset(dataset_name: str,
-                       format: str = 'dgl') -> Union[dgl.DGLGraph, pygdata.HeteroData]:
+                       format: str = 'dgl',
+                       train_val_test_ratio: tuple = (0.1, 0.45, 0.45)) -> Union[dgl.DGLGraph, pygdata.HeteroData]:
     dataset_name = dataset_name.lower().strip() 
     format = format.lower().strip() 
     
@@ -617,13 +842,13 @@ def load_graph_dataset(dataset_name: str,
     elif dataset_name == 'reddit':
         g = load_Reddit_dataset()
     elif dataset_name == 'heco-acm':
-        g = load_HeCo_dataset('ACM')
+        g = load_HeCo_ACM_dataset()
     elif dataset_name == 'heco-freebase':
         g = load_HeCo_dataset('Freebase')
     elif dataset_name == 'acm_transe':
         g = load_ACM_TransE_dataset()
     elif dataset_name == 'aminer':
-        g = load_AMiner_dataset()
+        g = load_AMiner_dataset(train_val_test_ratio=train_val_test_ratio)
     else:
         raise AssertionError 
 
