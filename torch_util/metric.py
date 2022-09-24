@@ -92,11 +92,12 @@ def calc_acc(pred, target) -> float:
 def calc_cosine_similarity(h1: FloatTensor, 
                            h2: FloatTensor) -> FloatTensor:
     N, emb_dim = h1.shape 
-    assert h2.shape == (N, emb_dim)
+    assert h1.shape == h2.shape 
                            
     h1 = F.normalize(h1, p=2, dim=-1)
     h2 = F.normalize(h2, p=2, dim=-1)
 
     out = torch.mm(h1, h2.T)
+    assert out.shape == (N, N)
     
     return out 

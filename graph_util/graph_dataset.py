@@ -1,34 +1,161 @@
 from .imports import * 
 from .dgl_util import * 
 from .bean import * 
+from .feat_util import * 
+from .convert import * 
 
 from basic_util import * 
-from torch_geometric.datasets import CitationFull, DBLP, IMDB, AMiner, Yelp, CoraFull, Coauthor, MovieLens, HGBDataset, Planetoid, Reddit, OGB_MAG
-from ogb.nodeproppred import PygNodePropPredDataset
+from torch_util import * 
+from torch_geometric.datasets import CitationFull, DBLP, IMDB, AMiner, Yelp, CoraFull, Coauthor, MovieLens, HGBDataset, Planetoid, Reddit, OGB_MAG, Amazon
+from ogb.nodeproppred import PygNodePropPredDataset, DglNodePropPredDataset
 
 __all__ = [
-    'load_graph_dataset',
+    'load_homo_graph_dataset',
+    'load_hetero_graph_dataset',
     'load_HeCo_ACM_hg',
     'load_HeCo_DBLP_hg',
     'load_HeCo_AMiner_hg',
+    'load_DBLP_g',
+    'load_DBLP_hg',
+    'load_IMDB_hg',
+    'load_Cora_g',
+    'load_CiteSeer_g', 
+    'load_PubMed_g',
+    'load_ogbn_arxiv_g',
+    'load_ogbn_mag_TransE',
+    'load_ogbn_mag_Metapath2Vec',
+    'load_Coauthor_CS_g', 
+    'load_Amazon_Computers_g', 
+    'load_Amazon_Photo_g', 
 ]
 
-ROOT_CANDIDATES = [
-    '/Dataset',
-    '/home/Dataset',
-    '~/Dataset'
-]
 
-for _root in ROOT_CANDIDATES:
-    _root = os.path.expanduser(_root)
+def load_ogbn_g(name: str) -> dgl.DGLGraph:
+    dataset = DglNodePropPredDataset(name=name, root=f"/Dataset/OGB/{name}")
+    split_idx = dataset.get_idx_split()
+    train_idx, valid_idx, test_idx = split_idx["train"], split_idx["valid"], split_idx["test"]
+    g, label = dataset[0]
+    
+    num_nodes = g.num_nodes() 
+    label = label.view(num_nodes)
+    train_mask = torch.zeros(num_nodes, dtype=torch.bool)
+    val_mask = torch.zeros(num_nodes, dtype=torch.bool)
+    test_mask = torch.zeros(num_nodes, dtype=torch.bool)
+    train_mask[train_idx.squeeze()] = True 
+    val_mask[valid_idx.squeeze()] = True 
+    test_mask[test_idx.squeeze()] = True 
+    assert torch.all(train_mask | val_mask | test_mask)
+    assert torch.all(~(train_mask & val_mask)) and torch.all(~(train_mask & test_mask)) and torch.all(~(val_mask & test_mask))
+    g.ndata['train_mask'] = train_mask
+    g.ndata['val_mask'] = val_mask
+    g.ndata['test_mask'] = test_mask
+    g.ndata['label'] = label 
+    
+    return g 
 
-    if os.path.exists(_root):
-        root = _root 
-        break 
-else:
-    raise RuntimeError('数据集根目录不存在！')
+
+def load_homo_graph_dataset(
+        name: str,
+        train_val_test_ratio: Optional[tuple[float, float, float]] = None,
+        to_bidirected: bool = True,
+        add_self_loop: bool = True) -> dgl.DGLGraph:
+    if name == 'ogbn-papers100M':
+        raise NotImplementedError
+
+    elif name == 'ogbn-arxiv':
+        pkl_path = '/Dataset/OGB/ogbn-arxiv/ogbn-arxiv.dict.pkl'
+
+        if is_file_exist(pkl_path):
+            graph_dict = pickle_load(pkl_path)
+        else:
+            g = load_ogbn_g('ogbn-arxiv')
+            graph_dict = convert_dgl_g_to_dict(g)
+            pickle_dump(graph_dict, pkl_path)
+            
+    elif name == 'ogbn-products':
+        pkl_path = '/Dataset/OGB/ogbn-products/ogbn-products.dict.pkl'
+
+        if is_file_exist(pkl_path):
+            graph_dict = pickle_load(pkl_path)
+        else:
+            g = load_ogbn_g('ogbn-products')
+            graph_dict = convert_dgl_g_to_dict(g)
+            pickle_dump(graph_dict, pkl_path)
+
+    else:
+        raise AssertionError 
+    
+    g = convert_dict_to_dgl_g(graph_dict, to_bidirected=to_bidirected, add_self_loop=add_self_loop)
+        
+    return g 
+    
+    
+def load_hetero_graph_dataset():
+    raise NotImplementedError
+
+    
+def generate_onehot_feat(hg: dgl.DGLHeteroGraph):
+    device = hg.device 
+    
+    for ntype in hg.ntypes:
+        try:
+            hg.nodes[ntype].data['feat']
+        except KeyError:
+            hg.nodes[ntype].data['feat'] = torch.eye(hg.num_nodes(ntype), device=device)
+
+            
+def load_Amazon_Computers_g(train_ratio: float,
+                            val_ratio: float,
+                            test_ratio: float) -> dgl.DGLGraph:
+    dataset = Amazon(
+        root = os.path.join(root, 'PyG/Amazon'),
+        name = 'Computers',
+    )
+
+    _g = dataset[0]
+    num_nodes = _g.num_nodes
+    feat = _g.x 
+    label = _g.y 
+    edge_index = tuple(_g.edge_index)
+    
+    g = dgl.graph(edge_index, num_nodes=num_nodes)
+    g.ndata['feat'] = feat 
+    g.ndata['label'] = label
+    
+    train_mask, val_mask, test_mask = random_split_dataset(num_nodes, train_ratio=train_ratio, val_ratio=val_ratio, test_ratio=test_ratio)
+    g.ndata['train_mask'] = train_mask
+    g.ndata['val_mask'] = val_mask
+    g.ndata['test_mask'] = test_mask
+    
+    return g 
 
 
+def load_Amazon_Photo_g(train_ratio: float,
+                        val_ratio: float,
+                        test_ratio: float) -> dgl.DGLGraph:
+    dataset = Amazon(
+        root = os.path.join(root, 'PyG/Amazon'),
+        name = 'Photo',
+    )
+
+    _g = dataset[0]
+    num_nodes = _g.num_nodes
+    feat = _g.x 
+    label = _g.y 
+    edge_index = tuple(_g.edge_index)
+    
+    g = dgl.graph(edge_index, num_nodes=num_nodes)
+    g.ndata['feat'] = feat 
+    g.ndata['label'] = label
+    
+    train_mask, val_mask, test_mask = random_split_dataset(num_nodes, train_ratio=train_ratio, val_ratio=val_ratio, test_ratio=test_ratio)
+    g.ndata['train_mask'] = train_mask
+    g.ndata['val_mask'] = val_mask
+    g.ndata['test_mask'] = test_mask
+    
+    return g 
+            
+            
 def load_HeCo_AMiner_hg() -> dgl.DGLHeteroGraph:
     _label = np.load(os.path.join(root, 'HeCo/AMiner/labels.npy')).astype('int32')
     _pa = np.load(os.path.join(root, 'HeCo/AMiner/nei_a.npy'), allow_pickle=True)
@@ -90,7 +217,7 @@ def load_HeCo_AMiner_hg() -> dgl.DGLHeteroGraph:
     return hg 
 
     
-def load_HeCo_ACM_hg() -> dgl.DGLHeteroGraph:
+def load_HeCo_ACM_hg(onehot_feat: bool = True) -> dgl.DGLHeteroGraph:
     _label = np.load(os.path.join(root, 'HeCo/ACM/labels.npy')).astype('int32')
     _pa = np.load(os.path.join(root, 'HeCo/ACM/nei_a.npy'), allow_pickle=True)
     _ps = np.load(os.path.join(root, 'HeCo/ACM/nei_s.npy'), allow_pickle=True)
@@ -152,11 +279,20 @@ def load_HeCo_ACM_hg() -> dgl.DGLHeteroGraph:
     hg.nodes['paper'].data['train_mask'] = train_mask
     hg.nodes['paper'].data['val_mask'] = val_mask
     hg.nodes['paper'].data['test_mask'] = test_mask
+    
+    if onehot_feat:
+        generate_onehot_feat(hg)
+    
+    hg.infer_ntype = 'paper'
+    hg.metapath_list = [
+        ['pa', 'ap'],
+        ['ps', 'sp'],
+    ]
 
     return hg 
 
 
-def load_HeCo_DBLP_hg() -> dgl.DGLHeteroGraph:
+def load_HeCo_DBLP_hg(onehot_feat: bool = True) -> dgl.DGLHeteroGraph:
     _label = np.load(os.path.join(root, 'HeCo/DBLP/labels.npy')).astype('int32')
     _feat = sp.load_npz(os.path.join(root, 'HeCo/DBLP/a_feat.npz'))
     _train = np.load(os.path.join(root, 'HeCo/ACM/train_20.npy'))
@@ -226,6 +362,16 @@ def load_HeCo_DBLP_hg() -> dgl.DGLHeteroGraph:
     hg.nodes['author'].data['val_mask'] = val_mask
     hg.nodes['author'].data['test_mask'] = test_mask
     
+    if onehot_feat:
+        generate_onehot_feat(hg)
+        
+    hg.infer_ntype = 'author'
+    hg.metapath_list = [
+        ['ap', 'pa'],
+        ['ap', 'pt', 'tp', 'pa'],
+        ['ap', 'pc', 'cp', 'pa'],
+    ]
+    
     return hg 
 
 
@@ -252,7 +398,8 @@ def load_ACM_TransE_dataset() -> dgl.DGLHeteroGraph:
     return hg 
 
 
-def load_Planetoid_dataset(name: str) -> dgl.DGLGraph:
+def load_Planetoid_dataset(name: str,
+                           normalize_feature: bool = False) -> dgl.DGLGraph:
     dataset = Planetoid(
         root = os.path.join(root, 'PyG/Planetoid'),
         name = name,
@@ -266,6 +413,9 @@ def load_Planetoid_dataset(name: str) -> dgl.DGLGraph:
     val_mask = _g.val_mask
     test_mask = _g.test_mask
     
+    if normalize_feature:
+        feat = L1_normalize(feat)
+    
     g = dgl.graph(edge_index)
     g.ndata['feat'] = feat 
     g.ndata['label'] = label
@@ -273,7 +423,19 @@ def load_Planetoid_dataset(name: str) -> dgl.DGLGraph:
     g.ndata['val_mask'] = val_mask
     g.ndata['test_mask'] = test_mask
     
-    return g 
+    return g
+
+
+def load_Cora_g(normalize_feature: bool = False) -> dgl.DGLGraph:
+    return load_Planetoid_dataset('Cora', normalize_feature=normalize_feature)
+
+
+def load_CiteSeer_g(normalize_feature: bool = False) -> dgl.DGLGraph:
+    return load_Planetoid_dataset('CiteSeer', normalize_feature=normalize_feature)
+
+
+def load_PubMed_g(normalize_feature: bool = False) -> dgl.DGLGraph:
+    return load_Planetoid_dataset('PubMed', normalize_feature=normalize_feature)
 
 
 def load_Reddit_dataset() -> dgl.DGLGraph:
@@ -435,7 +597,7 @@ def load_HGB_dataset(name: str) -> dgl.DGLHeteroGraph:
     return hg 
 
 
-def load_ogbn_mag_with_TransE() -> dgl.DGLHeteroGraph:
+def load_ogbn_mag_TransE() -> dgl.DGLHeteroGraph:
     hg = load_OGB_dataset('ogbn-mag')
     
     hg_pyg = OGB_MAG(
@@ -451,7 +613,7 @@ def load_ogbn_mag_with_TransE() -> dgl.DGLHeteroGraph:
     return hg 
 
 
-def load_ogbn_mag_with_Metapath2Vec() -> dgl.DGLHeteroGraph:
+def load_ogbn_mag_Metapath2Vec() -> dgl.DGLHeteroGraph:
     hg = load_OGB_dataset('ogbn-mag')
     
     hg_pyg = OGB_MAG(
@@ -465,6 +627,40 @@ def load_ogbn_mag_with_Metapath2Vec() -> dgl.DGLHeteroGraph:
     hg.nodes['institution'].data['feat'] = hg_pyg['institution'].x
 
     return hg 
+
+
+def load_ogbn_arxiv_g(to_bidirected: bool = True) -> dgl.DGLGraph:
+    dataset = PygNodePropPredDataset(name='ogbn-arxiv', root=os.path.join(root, 'OGB/ogbn-arxiv')) 
+
+    split_idx = dataset.get_idx_split()
+    train_idx, valid_idx, test_idx = split_idx["train"], split_idx["valid"], split_idx["test"]
+
+    _g = dataset[0]
+    num_nodes = _g.num_nodes 
+    feat = _g.x
+    year = _g.node_year.squeeze(dim=-1)
+    label = _g.y.squeeze(dim=-1)
+    edge_index = tuple(_g.edge_index)
+    train_mask = torch.zeros(num_nodes, dtype=torch.bool)
+    val_mask = torch.zeros(num_nodes, dtype=torch.bool)
+    test_mask = torch.zeros(num_nodes, dtype=torch.bool)
+    train_mask[train_idx] = True
+    val_mask[valid_idx] = True
+    test_mask[test_idx] = True
+    
+    g = dgl.graph(edge_index)
+    
+    if to_bidirected:
+        g = dgl.to_bidirected(g, copy_ndata=True)
+    
+    g.ndata['feat'] = feat
+    g.ndata['year'] = year
+    g.ndata['label'] = label
+    g.ndata['train_mask'] = train_mask
+    g.ndata['val_mask'] = val_mask
+    g.ndata['test_mask'] = test_mask
+
+    return g 
 
 
 def load_OGB_dataset(name: str) -> dgl.DGLGraph:
@@ -574,6 +770,32 @@ def load_MovieLens_dataset() -> dgl.DGLHeteroGraph:
     raise NotImplementedError
 
 
+def load_Coauthor_CS_g(train_ratio: float,
+                       val_ratio: float,
+                       test_ratio: float) -> dgl.DGLGraph:
+    dataset = Coauthor(
+        root = os.path.join(root, 'PyG/Coauthor'),
+        name = 'CS',
+    )
+    
+    _g = dataset[0]
+    num_nodes = _g.num_nodes
+    feat = _g.x 
+    label = _g.y 
+    edge_index = tuple(_g.edge_index)
+    
+    g = dgl.graph(edge_index, num_nodes=num_nodes)
+    g.ndata['feat'] = feat 
+    g.ndata['label'] = label
+    
+    train_mask, val_mask, test_mask = random_split_dataset(num_nodes, train_ratio=train_ratio, val_ratio=val_ratio, test_ratio=test_ratio)
+    g.ndata['train_mask'] = train_mask
+    g.ndata['val_mask'] = val_mask
+    g.ndata['test_mask'] = test_mask
+    
+    return g 
+
+
 def load_Coauthor_dataset(name: str) -> dgl.DGLGraph:
     dataset = Coauthor(
         root = os.path.join(root, 'PyG/Coauthor'),
@@ -632,59 +854,69 @@ def load_Yelp_dataset() -> dgl.DGLGraph:
     return g 
 
 
-def load_DBLP_dataset(homo_or_hetero: bool) -> dgl.DGLGraph:
-    if homo_or_hetero:
-        dataset = CitationFull(
-            root = os.path.join(root, 'PyG/DBLP_homo'),
-            name = 'DBLP',
-        )
-        
-        _g = dataset[0]
-        feat = _g.x 
-        label = _g.y 
-        edge_index = tuple(_g.edge_index)
-        
-        g = dgl.graph(edge_index)
-        g.ndata['feat'] = feat 
-        g.ndata['label'] = label 
-        
-        return g 
+def load_DBLP_g() -> dgl.DGLGraph:
+    dataset = CitationFull(
+        root = os.path.join(root, 'PyG/DBLP_homo'),
+        name = 'DBLP',
+    )
     
-    else:
-        dataset = DBLP(
-            root = os.path.join(root, 'PyG/DBLP_hetero'),
-        )
+    _g = dataset[0]
+    feat = _g.x 
+    label = _g.y 
+    edge_index = tuple(_g.edge_index)
+    
+    g = dgl.graph(edge_index)
+    g.ndata['feat'] = feat 
+    g.ndata['label'] = label 
+    
+    return g 
 
-        _hg = dataset[0]
-        author_feat = _hg.x_dict['author']
-        author_label = _hg.y_dict['author']
-        author_train_mask = _hg.train_mask_dict['author']
-        author_val_mask = _hg.val_mask_dict['author']
-        author_test_mask = _hg.test_mask_dict['author']
-        paper_feat = _hg.x_dict['paper']
-        term_feat = _hg.x_dict['term']
-        edge_index_dict = {
-            ('author', 'ap', 'paper'): tuple(_hg.edge_index_dict[('author', 'to', 'paper')]), 
-            ('paper', 'pa', 'author'): tuple(_hg.edge_index_dict[('paper', 'to', 'author')]), 
-            ('paper', 'pt', 'term'): tuple(_hg.edge_index_dict[('paper', 'to', 'term')]), 
-            ('paper', 'pc', 'conference'): tuple(_hg.edge_index_dict[('paper', 'to', 'conference')]), 
-            ('term', 'tp', 'paper'): tuple(_hg.edge_index_dict[('term', 'to', 'paper')]), 
-            ('conference', 'cp', 'paper'): tuple(_hg.edge_index_dict[('conference', 'to', 'paper')]), 
-        }
-        
-        hg = dgl.heterograph(edge_index_dict)
-        hg.nodes['author'].data['feat'] = author_feat
-        hg.nodes['author'].data['label'] = author_label
-        hg.nodes['author'].data['train_mask'] = author_train_mask
-        hg.nodes['author'].data['val_mask'] = author_val_mask
-        hg.nodes['author'].data['test_mask'] = author_test_mask
-        hg.nodes['paper'].data['feat'] = paper_feat
-        hg.nodes['term'].data['feat'] = term_feat
 
-        return hg 
+def load_DBLP_hg(onehot_feat: bool = True) -> dgl.DGLHeteroGraph:
+    dataset = DBLP(
+        root = os.path.join(root, 'PyG/DBLP_hetero'),
+    )
+
+    _hg = dataset[0]
+    author_feat = _hg.x_dict['author']
+    author_label = _hg.y_dict['author']
+    author_train_mask = _hg.train_mask_dict['author']
+    author_val_mask = _hg.val_mask_dict['author']
+    author_test_mask = _hg.test_mask_dict['author']
+    paper_feat = _hg.x_dict['paper']
+    term_feat = _hg.x_dict['term']
+    edge_index_dict = {
+        ('author', 'ap', 'paper'): tuple(_hg.edge_index_dict[('author', 'to', 'paper')]), 
+        ('paper', 'pa', 'author'): tuple(_hg.edge_index_dict[('paper', 'to', 'author')]), 
+        ('paper', 'pt', 'term'): tuple(_hg.edge_index_dict[('paper', 'to', 'term')]), 
+        ('paper', 'pc', 'conference'): tuple(_hg.edge_index_dict[('paper', 'to', 'conference')]), 
+        ('term', 'tp', 'paper'): tuple(_hg.edge_index_dict[('term', 'to', 'paper')]), 
+        ('conference', 'cp', 'paper'): tuple(_hg.edge_index_dict[('conference', 'to', 'paper')]), 
+    }
+    
+    hg = dgl.heterograph(edge_index_dict)
+    hg.nodes['author'].data['feat'] = author_feat
+    hg.nodes['author'].data['label'] = author_label
+    hg.nodes['author'].data['train_mask'] = author_train_mask
+    hg.nodes['author'].data['val_mask'] = author_val_mask
+    hg.nodes['author'].data['test_mask'] = author_test_mask
+    hg.nodes['paper'].data['feat'] = paper_feat
+    hg.nodes['term'].data['feat'] = term_feat
+    
+    if onehot_feat:
+        hg.nodes['conference'].data['feat'] = torch.eye(hg.num_nodes('conference'))
+        
+    hg.infer_ntype = 'author'
+    hg.metapath_list = [
+        ['ap', 'pa'],
+        ['ap', 'pc', 'cp', 'pa'],
+        ['ap', 'pt', 'tp', 'pa'],
+    ]
+
+    return hg 
     
     
-def load_IMDB_dataset() -> dgl.DGLHeteroGraph:
+def load_IMDB_hg() -> dgl.DGLHeteroGraph:
     dataset = IMDB(root=os.path.join(root, 'PyG/IMDB'))
 
     _hg = dataset[0] 
@@ -715,6 +947,12 @@ def load_IMDB_dataset() -> dgl.DGLHeteroGraph:
     hg.nodes['movie'].data['test_mask'] = movie_test_mask
     hg.nodes['director'].data['feat'] = director_feat 
     hg.nodes['actor'].data['feat'] = actor_feat 
+    
+    hg.infer_ntype = 'movie'
+    hg.metapath_list = [
+        ['md', 'dm'],
+        ['ma', 'am'],
+    ]
     
     return hg 
 

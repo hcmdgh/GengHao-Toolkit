@@ -17,9 +17,21 @@ __all__ = [
     'is_on_gpu',
     'load_model_state',
     'save_model_state',
+    'compare_tensor', 
 ]
 
 _device = torch.device('cpu')
+
+
+def compare_tensor(v1, v2):
+    if isinstance(v1, FloatTensor):
+        v1 = v1.detach().cpu().numpy() 
+    if isinstance(v2, FloatTensor):
+        v2 = v2.detach().cpu().numpy()
+
+    print(f"The shape of v1: {v1.shape}")
+    print(f"The shape of v2: {v2.shape}")
+    print(f"The difference between v1 and v2: {np.sum(np.power(v1 - v2, 2))}")
 
 
 def to_ndarray(v, dtype) -> FloatArray:

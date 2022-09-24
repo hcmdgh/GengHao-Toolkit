@@ -8,3 +8,4 @@ from .sbert import *
 from .sparse import *
 from .recorder import * 
 from .activation import * 
+from .hash import * 

@@ -65,7 +65,8 @@ class ClassificationRecorder:
         best_val_acc_epoch, best_val_acc = self._get_best_val_acc()
         
         if self.use_log:
-            log_info(f"epoch: {epoch}, val_acc: {val_acc:.4f} (best: {best_val_acc:.4f} in epoch {best_val_acc_epoch}), test_acc: {test_acc:.4f}")
+            log_info(f"Epoch: {epoch}, Val Acc: {val_acc:.4f}, Test Acc: {test_acc:.4f}")
+            log_info(f"Best Situation — Epoch: {best_val_acc_epoch}, Val Acc: {best_val_acc:.4f}, Test Acc: {self.test_acc_dict[best_val_acc_epoch]:.4f}")
             
         if self.use_wandb_log:
             wandb.log(

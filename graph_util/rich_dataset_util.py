@@ -1,5 +1,5 @@
 from .imports import * 
-from .dataset_util import * 
+from .graph_dataset import * 
 
 __all__ = [
     'RichHeteroGraphDataset',

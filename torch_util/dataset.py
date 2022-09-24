@@ -2,62 +2,44 @@ from .imports import *
 from numpy.random import default_rng 
 
 __all__ = [
-    'split_train_val_set',
-    'split_train_val_test_set',
+    'random_split_dataset',
 ]
 
-DEFAULT_SEED = 1428
+DEFAULT_SEED = 14285
 
 
-def split_train_val_set(*,
-                        total_cnt: int,
-                        train_ratio: float,
-                        val_ratio: float,
-                        seed: int = DEFAULT_SEED) -> tuple[BoolArray, BoolArray]:
-    assert train_ratio + val_ratio == 1. 
-
-    rng = default_rng(seed)
-    
-    rand_idxs = rng.permutation(total_cnt)
-    
-    num_train = int(total_cnt * train_ratio)
-    
-    train_mask = np.zeros(total_cnt, dtype=bool)
-    val_mask = np.zeros(total_cnt, dtype=bool)
-
-    train_mask[rand_idxs[:num_train]] = True
-    val_mask[rand_idxs[num_train:]] = True
-    
-    assert np.all(train_mask | val_mask)
-    assert np.all(~(train_mask & val_mask))
-
-    return train_mask, val_mask
-
-
-def split_train_val_test_set(*,
-                             total_cnt: int,
-                             train_ratio: float,
-                             val_ratio: float,
-                             test_ratio: float,
-                             seed: int = DEFAULT_SEED) -> tuple[BoolArray, BoolArray, BoolArray]:
-    assert train_ratio + val_ratio + test_ratio == 1. 
+def random_split_dataset(total_cnt: int,
+                         *, 
+                         train_ratio: float,
+                         val_ratio: float,
+                         test_ratio: float, 
+                         seed: int = DEFAULT_SEED,
+                         return_numpy: bool = False) -> tuple:
+    assert math.isclose(train_ratio + val_ratio + test_ratio, 1.) 
 
     rng = default_rng(seed)
+    perm = rng.permutation(total_cnt)
     
-    rand_idxs = rng.permutation(total_cnt)
-    
-    num_train = int(total_cnt * train_ratio)
-    num_val = int(total_cnt * val_ratio)
+    train_cnt = int(total_cnt * train_ratio)
+    val_cnt = int(total_cnt * val_ratio)
     
     train_mask = np.zeros(total_cnt, dtype=bool)
     val_mask = np.zeros(total_cnt, dtype=bool)
     test_mask = np.zeros(total_cnt, dtype=bool)
 
-    train_mask[rand_idxs[:num_train]] = True
-    val_mask[rand_idxs[num_train: num_train + num_val]] = True
-    test_mask[rand_idxs[num_train + num_val:]] = True
+    train_mask[perm[:train_cnt]] = True
+    val_mask[perm[train_cnt : train_cnt + val_cnt]] = True
+    test_mask[perm[train_cnt + val_cnt:]] = True
     
     assert np.all(train_mask | val_mask | test_mask)
     assert np.all(~(train_mask & val_mask & test_mask))
+    assert np.sum(train_mask) == train_cnt and np.sum(val_mask) == val_cnt 
 
-    return train_mask, val_mask, test_mask 
+    if return_numpy:
+        return train_mask, val_mask, test_mask 
+    else:
+        return (
+            torch.tensor(train_mask, dtype=torch.bool),
+            torch.tensor(val_mask, dtype=torch.bool),
+            torch.tensor(test_mask, dtype=torch.bool),
+        )

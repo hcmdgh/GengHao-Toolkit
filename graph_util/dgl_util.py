@@ -1,6 +1,5 @@
 from .imports import * 
 from .bean import * 
-
 from basic_util import * 
 
 __all__ = [
@@ -8,7 +7,25 @@ __all__ = [
     'load_dgl_graph', 
     'get_edge_index',
     'hash_graph', 
+    'get_adj_mat', 
 ]
+
+
+def get_adj_mat(g: dgl.DGLGraph,
+                return_tensor: bool,
+                return_sparse: bool):
+    adj_mat = g.adj()
+    
+    if return_tensor and return_sparse:
+        return adj_mat  
+    elif return_tensor and not return_sparse:
+        return adj_mat.to_dense() 
+    elif not return_tensor and return_sparse:
+        raise NotImplementedError 
+    elif not return_tensor and not return_sparse:
+        return adj_mat.to_dense().numpy() 
+    else:
+        raise AssertionError
 
 
 def hash_graph(g: dgl.DGLGraph) -> str:
@@ -75,6 +92,10 @@ def get_edge_index(g: dgl.DGLGraph,
                     raise AssertionError 
                 
                 edge_index_dict[etype] = edge_index 
+                
+        # 二分图
+        if len(edge_index_dict) == 1:
+            return next(iter(edge_index_dict.values()))
             
         return edge_index_dict
 
