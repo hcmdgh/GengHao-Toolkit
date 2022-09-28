@@ -6,12 +6,17 @@ from .convert import *
 
 from basic_util import * 
 from torch_util import * 
-from torch_geometric.datasets import CitationFull, DBLP, IMDB, AMiner, Yelp, CoraFull, Coauthor, MovieLens, HGBDataset, Planetoid, Reddit, OGB_MAG, Amazon
+from torch_geometric.datasets import CitationFull, DBLP, IMDB, AMiner, Yelp, CoraFull, Coauthor, MovieLens, HGBDataset, Planetoid, Reddit, OGB_MAG, Amazon, TUDataset
 from ogb.nodeproppred import PygNodePropPredDataset, DglNodePropPredDataset
+from ogb.graphproppred import DglGraphPropPredDataset, collate_dgl
+from numpy.random import default_rng 
 
 __all__ = [
     'load_homo_graph_dataset',
     'load_hetero_graph_dataset',
+
+    'load_TUDataset', 
+    
     'load_HeCo_ACM_hg',
     'load_HeCo_DBLP_hg',
     'load_HeCo_AMiner_hg',
@@ -28,6 +33,60 @@ __all__ = [
     'load_Amazon_Computers_g', 
     'load_Amazon_Photo_g', 
 ]
+
+
+def load_TUDataset(name: str) -> dict[str, Any]:
+    if name == 'MUTAG':
+        dataset = TUDataset(root='/Dataset/PyG/TUDataset', name=name, use_node_attr=True, use_edge_attr=True)
+        num_gs = len(dataset)
+        g_list = [] 
+        label_list = [] 
+        
+        for i, _g in enumerate(dataset):
+            num_nodes = _g.num_nodes 
+            edge_index = tuple(_g.edge_index)
+
+            g = dgl.graph(edge_index, num_nodes=num_nodes)
+            g.ndata['feat'] = _g.x 
+            g.edata['feat'] = _g.edge_attr
+            g_list.append(g)
+            
+            label = int(_g.y)
+            label_list.append(label)
+        
+        assert len(g_list) == len(label_list) == num_gs 
+        
+        return dict(
+            g_list = g_list, 
+            label = np.array(label_list, dtype=np.int64), 
+        )
+        
+    elif name in ['PROTEINS', 'PROTEINS_full', 'NCI1']:
+        dataset = TUDataset(root='/Dataset/PyG/TUDataset', name=name, use_node_attr=True, use_edge_attr=True)
+        num_gs = len(dataset)
+        g_list = [] 
+        label_list = [] 
+        
+        for i, _g in enumerate(dataset):
+            num_nodes = _g.num_nodes 
+            edge_index = tuple(_g.edge_index)
+
+            g = dgl.graph(edge_index, num_nodes=num_nodes)
+            g.ndata['feat'] = _g.x 
+            g_list.append(g)
+            
+            label = int(_g.y)
+            label_list.append(label)
+        
+        assert len(g_list) == len(label_list) == num_gs 
+        
+        return dict(
+            g_list = g_list, 
+            label = np.array(label_list, dtype=np.int64), 
+        )
+        
+    else:
+        raise AssertionError
 
 
 def load_ogbn_g(name: str) -> dgl.DGLGraph:
@@ -54,6 +113,49 @@ def load_ogbn_g(name: str) -> dgl.DGLGraph:
     return g 
 
 
+def load_ogbn_mag_hg() -> dgl.DGLHeteroGraph:
+    dataset = PygNodePropPredDataset(name='ogbn-mag', root='/Dataset/OGB/ogbn-mag') 
+
+    split_idx = dataset.get_idx_split()
+    train_idx, valid_idx, test_idx = split_idx["train"]['paper'], split_idx["valid"]['paper'], split_idx["test"]['paper']
+
+    _hg = dataset[0]
+    paper_feat = _hg.x_dict['paper']
+    paper_year = _hg.node_year['paper'].squeeze(dim=-1)
+    paper_label = _hg.y_dict['paper'].squeeze(dim=-1)
+    paper_num_nodes = len(paper_feat)
+    train_mask = torch.zeros(paper_num_nodes, dtype=torch.bool)
+    val_mask = torch.zeros(paper_num_nodes, dtype=torch.bool)
+    test_mask = torch.zeros(paper_num_nodes, dtype=torch.bool)
+    train_mask[train_idx] = True
+    val_mask[valid_idx] = True
+    test_mask[test_idx] = True
+    edge_index_dict = {
+        ('author', 'ai', 'institution'): tuple(_hg.edge_index_dict[('author', 'affiliated_with', 'institution')]),
+        ('author', 'ap', 'paper'): tuple(_hg.edge_index_dict[('author', 'writes', 'paper')]),
+        ('paper', 'pp', 'paper'): tuple(_hg.edge_index_dict[('paper', 'cites', 'paper')]),
+        ('paper', 'pf', 'field'): tuple(_hg.edge_index_dict[('paper', 'has_topic', 'field_of_study')]),
+    }
+    
+    # 增加反向边
+    edge_index_dict.update({
+        ('institution', 'ia', 'author'): edge_index_dict[('author', 'ai', 'institution')][::-1],
+        ('paper', 'pa', 'author'): edge_index_dict[('author', 'ap', 'paper')][::-1],
+        ('paper', 'pp_rev', 'paper'): edge_index_dict[('paper', 'pp', 'paper')][::-1],
+        ('field', 'fp', 'paper'): edge_index_dict[('paper', 'pf', 'field')][::-1],
+    })
+    
+    hg = dgl.heterograph(edge_index_dict)
+    hg.nodes['paper'].data['feat'] = paper_feat
+    hg.nodes['paper'].data['year'] = paper_year
+    hg.nodes['paper'].data['label'] = paper_label 
+    hg.nodes['paper'].data['train_mask'] = train_mask 
+    hg.nodes['paper'].data['val_mask'] = val_mask 
+    hg.nodes['paper'].data['test_mask'] = test_mask 
+    
+    return hg 
+
+
 def load_homo_graph_dataset(
         name: str,
         train_val_test_ratio: Optional[tuple[float, float, float]] = None,
@@ -63,6 +165,8 @@ def load_homo_graph_dataset(
         raise NotImplementedError
 
     elif name == 'ogbn-arxiv':
+        assert train_val_test_ratio is None 
+        
         pkl_path = '/Dataset/OGB/ogbn-arxiv/ogbn-arxiv.dict.pkl'
 
         if is_file_exist(pkl_path):
@@ -73,6 +177,8 @@ def load_homo_graph_dataset(
             pickle_dump(graph_dict, pkl_path)
             
     elif name == 'ogbn-products':
+        assert train_val_test_ratio is None 
+        
         pkl_path = '/Dataset/OGB/ogbn-products/ogbn-products.dict.pkl'
 
         if is_file_exist(pkl_path):
@@ -90,8 +196,25 @@ def load_homo_graph_dataset(
     return g 
     
     
-def load_hetero_graph_dataset():
-    raise NotImplementedError
+def load_hetero_graph_dataset(
+    name: str, 
+    train_val_test_ratio: Optional[tuple[float, float, float]] = None,
+) -> dict[str, Any]:
+    if name == 'ogbn-mag':
+        assert train_val_test_ratio is None 
+        
+        hg = load_ogbn_mag_hg()
+
+        return dict(hg=hg, infer_ntype='paper')
+    
+    elif name == 'AMiner':
+        train_ratio, val_ratio, test_ratio = train_val_test_ratio 
+        
+        hg = load_AMiner_hg(train_ratio=train_ratio, val_ratio=val_ratio, test_ratio=test_ratio)
+
+        return dict(hg=hg, infer_ntype='author', other_infer_ntype='venue')
+    else:
+        raise AssertionError 
 
     
 def generate_onehot_feat(hg: dgl.DGLHeteroGraph):
@@ -957,8 +1080,11 @@ def load_IMDB_hg() -> dgl.DGLHeteroGraph:
     return hg 
 
 
-def load_AMiner_dataset(train_val_test_ratio: tuple[float, float, float]) -> dgl.DGLHeteroGraph:
-    dataset = AMiner(root=os.path.join(root, 'PyG/AMiner'))
+def load_AMiner_hg(train_ratio: float,
+                   val_ratio: float,
+                   test_ratio: float,
+                   seed: int = 14285) -> dgl.DGLHeteroGraph:
+    dataset = AMiner(root='/Dataset/PyG/AMiner')
 
     _hg = dataset[0] 
     
@@ -977,10 +1103,10 @@ def load_AMiner_dataset(train_val_test_ratio: tuple[float, float, float]) -> dgl
     venue_label[_venue_label_nids] = _venue_label
     
     # [BEGIN] 划分训练集测试集
-    train_ratio, val_ratio, test_ratio = train_val_test_ratio
     assert math.isclose(train_ratio + val_ratio + test_ratio, 1.)
     
-    perm = np.random.permutation(len(_author_label_nids))
+    rng = default_rng(seed)
+    perm = rng.permutation(len(_author_label_nids))
     train_cnt = int(train_ratio * len(_author_label_nids))
     val_cnt = int(val_ratio * len(_author_label_nids))
     author_train_mask = torch.zeros(num_author_nodes, dtype=torch.bool)
@@ -989,8 +1115,9 @@ def load_AMiner_dataset(train_val_test_ratio: tuple[float, float, float]) -> dgl
     author_train_mask[_author_label_nids[perm[:train_cnt]]] = True 
     author_val_mask[_author_label_nids[perm[train_cnt:train_cnt+val_cnt]]] = True 
     author_test_mask[_author_label_nids[perm[train_cnt+val_cnt:]]] = True 
+    assert torch.all(~(author_train_mask & author_val_mask)) and torch.all(~(author_train_mask & author_test_mask)) and torch.all(~(author_val_mask & author_test_mask))
     
-    perm = np.random.permutation(len(_venue_label_nids))
+    perm = rng.permutation(len(_venue_label_nids))
     train_cnt = int(train_ratio * len(_venue_label_nids))
     val_cnt = int(val_ratio * len(_venue_label_nids))
     venue_train_mask = torch.zeros(num_venue_nodes, dtype=torch.bool)
@@ -999,6 +1126,7 @@ def load_AMiner_dataset(train_val_test_ratio: tuple[float, float, float]) -> dgl
     venue_train_mask[_venue_label_nids[perm[:train_cnt]]] = True 
     venue_val_mask[_venue_label_nids[perm[train_cnt:train_cnt+val_cnt]]] = True 
     venue_test_mask[_venue_label_nids[perm[train_cnt+val_cnt:]]] = True 
+    assert torch.all(~(venue_train_mask & venue_val_mask)) and torch.all(~(venue_train_mask & venue_test_mask)) and torch.all(~(venue_val_mask & venue_test_mask))
     # [END]
     
     pa_edge_index = tuple(_hg.edge_index_dict[('paper', 'written_by', 'author')])
