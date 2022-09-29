@@ -6,7 +6,7 @@ from .convert import *
 
 from basic_util import * 
 from torch_util import * 
-from torch_geometric.datasets import CitationFull, DBLP, IMDB, AMiner, Yelp, CoraFull, Coauthor, MovieLens, HGBDataset, Planetoid, Reddit, OGB_MAG, Amazon, TUDataset
+from torch_geometric.datasets import CitationFull, DBLP, IMDB, AMiner, Yelp, CoraFull, Coauthor, MovieLens, HGBDataset, Planetoid, Reddit, OGB_MAG, Amazon, TUDataset, ZINC 
 from ogb.nodeproppred import PygNodePropPredDataset, DglNodePropPredDataset
 from ogb.graphproppred import DglGraphPropPredDataset, collate_dgl
 from numpy.random import default_rng 
@@ -16,6 +16,7 @@ __all__ = [
     'load_hetero_graph_dataset',
 
     'load_TUDataset', 
+    'load_ZINC_dataset',
     
     'load_HeCo_ACM_hg',
     'load_HeCo_DBLP_hg',
@@ -33,6 +34,58 @@ __all__ = [
     'load_Amazon_Computers_g', 
     'load_Amazon_Photo_g', 
 ]
+
+
+def load_ZINC_dataset(subset: bool) -> dict[str, Any]:
+    def load_dataset(**kwargs):
+        dataset = ZINC(root='/Dataset/PyG/ZINC', **kwargs)
+        num_gs = len(dataset)
+        g_list = [] 
+        label_list = [] 
+        
+        for i, _g in enumerate(dataset):
+            num_nodes = _g.num_nodes 
+            edge_index = tuple(_g.edge_index)
+
+            g = dgl.graph(edge_index, num_nodes=num_nodes)
+            g.ndata['feat'] = _g.x 
+            g.edata['feat'] = _g.edge_attr 
+            g_list.append(g)
+            
+            label = float(_g.y)
+            label_list.append(label)
+        
+        assert len(g_list) == len(label_list) == num_gs 
+        
+        label = np.array(label_list, dtype=np.float32) 
+        
+        return g_list, label 
+    
+    train_g_list, train_label = load_dataset(subset=subset, split='train')
+    val_g_list, val_label = load_dataset(subset=subset, split='val')
+    test_g_list, test_label = load_dataset(subset=subset, split='test')
+    
+    g_list = train_g_list + val_g_list + test_g_list 
+    label = np.concatenate([train_label, val_label, test_label])
+    num_gs = len(g_list)
+    assert label.shape == (num_gs,)
+
+    train_mask = np.zeros(num_gs, dtype=bool)
+    val_mask = np.zeros(num_gs, dtype=bool)
+    test_mask = np.zeros(num_gs, dtype=bool)
+    train_mask[:len(train_g_list)] = True 
+    val_mask[len(train_g_list) : len(train_g_list) + len(val_g_list)] = True 
+    test_mask[len(train_g_list) + len(val_g_list):] = True 
+    assert np.all(train_mask | val_mask | test_mask)
+    assert np.all(~(train_mask & val_mask)) and np.all(~(train_mask & test_mask)) and np.all(~(val_mask & test_mask))
+    
+    return dict(
+        g_list = g_list,
+        label = label, 
+        train_mask = train_mask,
+        val_mask = val_mask,
+        test_mask = test_mask, 
+    )
 
 
 def load_TUDataset(name: str) -> dict[str, Any]:
