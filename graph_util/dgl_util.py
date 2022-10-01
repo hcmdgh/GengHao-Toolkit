@@ -6,7 +6,6 @@ __all__ = [
     'save_dgl_graph',
     'load_dgl_graph', 
     'get_edge_index',
-    'hash_graph', 
     'get_adj_mat', 
 ]
 
@@ -29,6 +28,7 @@ def get_adj_mat(g: dgl.DGLGraph,
 
 
 def hash_graph(g: dgl.DGLGraph) -> str:
+    raise NotImplementedError
     edge_index = get_edge_index(g, format='pyg', return_numpy=True)
     
     if isinstance(edge_index, IntArray):

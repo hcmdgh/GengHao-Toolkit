@@ -10,3 +10,4 @@ from .dropout_util import *
 from .convert import * 
 from .dglke import * 
 from .readout import * 
+from .hash import * 

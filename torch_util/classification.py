@@ -7,10 +7,6 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.neural_network import MLPClassifier
 
 __all__ = [
-    # 'KNeighbors_multiclass_classification',
-    # 'xgb_multiclass_classification',
-    # 'sklearn_multiclass_classification',
-    # 'mlp_multilabel_classification',
     'mlp_multiclass_classification',
 ]
 
@@ -75,8 +71,8 @@ def mlp_multiclass_classification(*,
             val_pred = model(feat[val_mask])
             test_pred = model(feat[test_mask])
 
-        val_acc = calc_acc(pred=val_pred, target=label[val_mask])
-        test_acc = calc_acc(pred=test_pred, target=label[test_mask])
+        val_acc = calc_acc(input=val_pred, target=label[val_mask])
+        test_acc = calc_acc(input=test_pred, target=label[test_mask])
         
         recorder.eval(epoch=epoch, val_acc=val_acc, test_acc=test_acc)    
 

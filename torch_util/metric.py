@@ -1,8 +1,5 @@
 from .imports import * 
-from .util import * 
 
-from sklearn.metrics import f1_score
-from sklearn.metrics import accuracy_score
 
 __all__ = [
     'calc_f1_micro',
@@ -12,86 +9,64 @@ __all__ = [
 ]
 
 
-def calc_f1_micro(pred: FloatArrayTensor,
-                  target: IntArrayTensor) -> float:
-    pred = to_FloatArray(pred)
-    target = to_IntArray(target)
+def calc_f1_micro() -> float:
+    raise DeprecationWarning
 
-    if target.ndim == 1:
-        N, num_classes = pred.shape 
+
+def calc_f1_macro() -> float:
+    raise DeprecationWarning
+
+
+def calc_acc(input: Union[ndarray, Tensor],
+             target: Union[ndarray, Tensor]) -> float:
+    if isinstance(input, Tensor):
+        input = input.detach().cpu().numpy() 
+    if isinstance(target, Tensor):
+        target = target.detach().cpu().numpy() 
+    
+    # 第1种情况-多分类单标签：input = int[N], target = int[N]
+    # 第2种情况-多分类单标签：input = float[N, D], target = int[N]
+    # 第3种情况-多分类多标签：input = int[N, D], target = int[N, D]
+    
+    # 第1种情况-多分类单标签：input = int[N], target = int[N]
+    if input.ndim == 1:
+        assert input.dtype == target.dtype == np.int64 
+        N = len(input)
+        assert input.shape == target.shape == (N,) 
+        
+        acc = (input == target).mean() 
+        
+        return float(acc) 
+     
+    # 第2种情况-多分类单标签：input = float[N, D], target = int[N]
+    elif input.ndim == 2 and target.ndim == 1:
+        assert input.dtype == np.float32 and target.dtype == np.int64  
+        N, D = input.shape 
         assert target.shape == (N,)
-        assert np.max(target) < num_classes
         
-        pred = np.argmax(pred, axis=-1)
-                    
-        return f1_score(y_true=target, y_pred=pred, average='micro')
-    elif target.ndim == 2:
-        N, num_classes = pred.shape 
-        assert target.shape == (N, num_classes)
-        assert np.min(target) == 0 and np.max(target) == 1 
-
-        _pred = np.zeros([N, num_classes], dtype=np.int64)
-        _pred[pred > 0.] = 1 
+        input = np.argmax(input, axis=-1) 
         
-        return f1_score(y_true=target, y_pred=_pred, average='micro')
-    else:
-        raise AssertionError
-
-
-def calc_f1_macro(pred: FloatArrayTensor,
-                  target: IntArrayTensor) -> float:
-    pred = to_FloatArray(pred)
-    target = to_IntArray(target)
-
-    if target.ndim == 1:
-        N, num_classes = pred.shape 
-        assert target.shape == (N,)
-        assert np.max(target) < num_classes
+        acc = (input == target).mean() 
         
-        pred = np.argmax(pred, axis=-1)
-                    
-        return f1_score(y_true=target, y_pred=pred, average='macro')
-    elif target.ndim == 2:
-        N, num_classes = pred.shape 
-        assert target.shape == (N, num_classes)
-        assert np.min(target) == 0 and np.max(target) == 1 
-
-        _pred = np.zeros([N, num_classes], dtype=np.int64)
-        _pred[pred > 0.] = 1 
+        return float(acc) 
+    
+    # 第3种情况-多分类多标签：input = int[N, D], target = int[N, D]
+    elif input.ndim == 2 and target.ndim == 2:
+        N, D = input.shape 
+        assert input.dtype == target.dtype == np.int64 
+        assert target.shape == (N, D)
         
-        return f1_score(y_true=target, y_pred=_pred, average='macro')
-    else:
-        raise AssertionError
-
-
-def calc_acc(pred, target) -> float:
-    pred = to_FloatArray(pred)
-    target = to_IntArray(target)
-
-    if target.ndim == 1:
-        N, num_classes = pred.shape 
-        assert target.shape == (N,)
-        assert np.max(target) < num_classes
+        acc = np.all(input == target, axis=-1).mean() 
         
-        pred = np.argmax(pred, axis=-1)
-                    
-        return accuracy_score(y_true=target, y_pred=pred)
-    elif target.ndim == 2:
-        N, num_classes = pred.shape 
-        assert target.shape == (N, num_classes)
-        assert np.min(target) == 0 and np.max(target) == 1 
-
-        _pred = np.zeros([N, num_classes], dtype=np.int64)
-        _pred[pred > 0.] = 1 
-        
-        return accuracy_score(y_true=target, y_pred=_pred)
+        return float(acc) 
+     
     else:
         raise AssertionError
 
 
 def calc_cosine_similarity(h1: FloatTensor, 
                            h2: FloatTensor) -> FloatTensor:
-    N, emb_dim = h1.shape 
+    N, D = h1.shape 
     assert h1.shape == h2.shape 
                            
     h1 = F.normalize(h1, p=2, dim=-1)

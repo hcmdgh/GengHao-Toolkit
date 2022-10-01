@@ -97,6 +97,7 @@ def save_model_state(model: nn.Module) -> bytes:
 
 def seed_all(seed: int):
     random.seed(seed)
+    os.environ['PYTHONHASHSEED'] = str(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
@@ -107,7 +108,7 @@ def seed_all(seed: int):
     import dgl 
     dgl.seed(seed)
     dgl.random.seed(seed)
-
+    
 
 def auto_set_device(use_gpu: bool = True) -> torch.device:
     global _device 

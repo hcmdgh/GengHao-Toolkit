@@ -266,6 +266,73 @@ def load_hetero_graph_dataset(
         hg = load_AMiner_hg(train_ratio=train_ratio, val_ratio=val_ratio, test_ratio=test_ratio)
 
         return dict(hg=hg, infer_ntype='author', other_infer_ntype='venue')
+    
+    elif name == 'ACM':
+        assert train_val_test_ratio is None 
+        
+        hg = load_ACM_dataset()
+
+        return dict(
+            hg = hg, 
+            infer_ntype = 'paper',
+            num_classes = 3,
+            metapath_list = [
+                ['pa', 'ap'],
+                ['pf', 'fp'],
+            ],
+        )
+        
+    elif name == 'DBLP':
+        assert train_val_test_ratio is None 
+        
+        hg = load_DBLP_hg()
+        
+        return dict(
+            hg = hg,
+            infer_ntype = 'author',
+            num_classes = 4,
+            metapath_list = [
+                ['ap', 'pa'],
+                ['ap', 'pc', 'cp', 'pa'],
+                ['ap', 'pt', 'tp', 'pa'],
+            ],
+        )
+        
+    elif name == 'IMDB':
+        assert not train_val_test_ratio 
+        
+        hg = load_IMDB_hg()
+        
+        return dict(
+            hg = hg,
+            infer_ntype = 'movie',
+            num_classes = 3,
+            metapath_list = [
+                ['md', 'dm'],
+                ['ma', 'am'],
+            ],
+        )
+        
+    elif name == 'HGB-ACM':
+        assert train_val_test_ratio
+        
+        hg = load_HGB_ACM_dataset(
+            train_ratio = train_val_test_ratio[0],
+            val_ratio = train_val_test_ratio[1],
+            test_ratio = train_val_test_ratio[2],
+        )
+        
+        return dict(
+            hg = hg, 
+            infer_ntype = 'paper',
+            num_classes = 3,
+            metapath_list = [
+                ['pa', 'ap'],
+                ['pf', 'fp'],
+                ['ps', 'sp'],
+            ],
+        )
+        
     else:
         raise AssertionError 
 
@@ -639,7 +706,7 @@ def load_Reddit_dataset() -> dgl.DGLGraph:
 
 def load_ACM_dataset() -> dgl.DGLHeteroGraph:
     url = "https://data.dgl.ai/dataset/ACM.mat"
-    mat_path = os.path.join(root, "DGL/ACM/ACM.mat")
+    mat_path = '/Dataset/DGL/ACM/ACM.mat'
     
     if not os.path.isfile(mat_path):
         raise FileNotFoundError(f"Please download the file manually!\nFrom: {url}\nTo: {mat_path}")
@@ -698,6 +765,55 @@ def load_ACM_dataset() -> dgl.DGLHeteroGraph:
     test_mask[test_idx] = True 
     
     hg.nodes['paper'].data['feat'] = feat 
+    hg.nodes['paper'].data['label'] = label 
+    hg.nodes['paper'].data['train_mask'] = train_mask 
+    hg.nodes['paper'].data['val_mask'] = val_mask 
+    hg.nodes['paper'].data['test_mask'] = test_mask 
+
+    return hg 
+
+
+def load_HGB_ACM_dataset(train_ratio: float,
+                         val_ratio: float, 
+                         test_ratio: float) -> dgl.DGLHeteroGraph:
+    dataset = HGBDataset(
+        root = '/Dataset/PyG/HGB',
+        name = 'ACM', 
+    )
+    _hg = dataset.data 
+    
+    hg = dgl.heterograph({
+        ('paper', 'pp', 'paper'): tuple(_hg.edge_index_dict[('paper', 'cite', 'paper')]),
+        ('paper', 'pp_rev', 'paper'): tuple(_hg.edge_index_dict[('paper', 'ref', 'paper')]),
+        ('paper', 'pa', 'author'): tuple(_hg.edge_index_dict[('paper', 'to', 'author')]),
+        ('author', 'ap', 'paper'): tuple(_hg.edge_index_dict[('author', 'to', 'paper')]),
+        ('paper', 'ps', 'subject'): tuple(_hg.edge_index_dict[('paper', 'to', 'subject')]),
+        ('subject', 'sp', 'paper'): tuple(_hg.edge_index_dict[('subject', 'to', 'paper')]),
+        ('paper', 'pt', 'term'): tuple(_hg.edge_index_dict[('paper', 'to', 'term')]),
+        ('term', 'tp', 'paper'): tuple(_hg.edge_index_dict[('term', 'to', 'paper')]),
+    })
+    
+    hg.nodes['paper'].data['feat'] = _hg['paper'].x 
+    hg.nodes['author'].data['feat'] = _hg['author'].x
+    hg.nodes['subject'].data['feat'] = _hg['subject'].x 
+
+    label = _hg['paper'].y
+    label_indices = (label >= 0).nonzero().squeeze().cpu().numpy() 
+    train_indices, val_indices, test_indices = random_split_dataset_idx(
+        label_indices,
+        train_ratio = train_ratio,
+        val_ratio = val_ratio,
+        test_ratio = test_ratio,
+    )
+    train_mask = torch.zeros(len(label), dtype=torch.bool)
+    val_mask = torch.zeros(len(label), dtype=torch.bool)
+    test_mask = torch.zeros(len(label), dtype=torch.bool)
+    train_mask[train_indices] = True 
+    val_mask[val_indices] = True 
+    test_mask[test_indices] = True
+    assert torch.all(~(train_mask & val_mask)) and torch.all(~(train_mask & test_mask)) and torch.all(~(val_mask & test_mask)) 
+
+    label[label < 0] = 0 
     hg.nodes['paper'].data['label'] = label 
     hg.nodes['paper'].data['train_mask'] = train_mask 
     hg.nodes['paper'].data['val_mask'] = val_mask 
@@ -1050,7 +1166,7 @@ def load_DBLP_g() -> dgl.DGLGraph:
 
 def load_DBLP_hg(onehot_feat: bool = True) -> dgl.DGLHeteroGraph:
     dataset = DBLP(
-        root = os.path.join(root, 'PyG/DBLP_hetero'),
+        root = '/Dataset/PyG/DBLP_hetero',
     )
 
     _hg = dataset[0]
@@ -1082,18 +1198,11 @@ def load_DBLP_hg(onehot_feat: bool = True) -> dgl.DGLHeteroGraph:
     if onehot_feat:
         hg.nodes['conference'].data['feat'] = torch.eye(hg.num_nodes('conference'))
         
-    hg.infer_ntype = 'author'
-    hg.metapath_list = [
-        ['ap', 'pa'],
-        ['ap', 'pc', 'cp', 'pa'],
-        ['ap', 'pt', 'tp', 'pa'],
-    ]
-
     return hg 
     
     
 def load_IMDB_hg() -> dgl.DGLHeteroGraph:
-    dataset = IMDB(root=os.path.join(root, 'PyG/IMDB'))
+    dataset = IMDB(root='/Dataset/PyG/IMDB')
 
     _hg = dataset[0] 
     movie_feat = _hg['movie'].x 
@@ -1123,12 +1232,6 @@ def load_IMDB_hg() -> dgl.DGLHeteroGraph:
     hg.nodes['movie'].data['test_mask'] = movie_test_mask
     hg.nodes['director'].data['feat'] = director_feat 
     hg.nodes['actor'].data['feat'] = actor_feat 
-    
-    hg.infer_ntype = 'movie'
-    hg.metapath_list = [
-        ['md', 'dm'],
-        ['ma', 'am'],
-    ]
     
     return hg 
 
