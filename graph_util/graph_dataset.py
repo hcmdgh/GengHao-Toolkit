@@ -6,34 +6,39 @@ from .convert import *
 
 from basic_util import * 
 from torch_util import * 
-from torch_geometric.datasets import CitationFull, DBLP, IMDB, AMiner, Yelp, CoraFull, Coauthor, MovieLens, HGBDataset, Planetoid, Reddit, OGB_MAG, Amazon, TUDataset, ZINC 
+from torch_geometric.datasets import CitationFull, DBLP, IMDB, AMiner, Yelp, CoraFull, Coauthor, MovieLens, HGBDataset, Planetoid, Reddit, OGB_MAG, Amazon, ZINC 
+from dgl.data import TUDataset, DGLDataset, DGLBuiltinDataset
 from ogb.nodeproppred import PygNodePropPredDataset, DglNodePropPredDataset
-from ogb.graphproppred import DglGraphPropPredDataset, collate_dgl
+from ogb.graphproppred import PygGraphPropPredDataset, DglGraphPropPredDataset, collate_dgl
+from torch_geometric.data import DataLoader as PyGDataLoader
 from numpy.random import default_rng 
+from torch.utils.data import DataLoader
 
 __all__ = [
     'load_homo_graph_dataset',
     'load_hetero_graph_dataset',
+    'load_multi_graph_dataset',
 
-    'load_TUDataset', 
-    'load_ZINC_dataset',
-    
-    'load_HeCo_ACM_hg',
-    'load_HeCo_DBLP_hg',
-    'load_HeCo_AMiner_hg',
-    'load_DBLP_g',
-    'load_DBLP_hg',
-    'load_IMDB_hg',
-    'load_Cora_g',
-    'load_CiteSeer_g', 
-    'load_PubMed_g',
-    'load_ogbn_arxiv_g',
-    'load_ogbn_mag_TransE',
-    'load_ogbn_mag_Metapath2Vec',
-    'load_Coauthor_CS_g', 
-    'load_Amazon_Computers_g', 
-    'load_Amazon_Photo_g', 
+    'load_ogbg_molhiv_dataset', 
 ]
+
+
+def load_ogbg_molhiv_dataset(batch_size: int = 32) -> tuple[DataLoader, DataLoader, DataLoader]:
+    dataset = DglGraphPropPredDataset(name='ogbg-molhiv', root='/Dataset/OGB/ogbg-molhiv')
+
+    split_idx = dataset.get_idx_split()
+    train_loader = DataLoader(dataset[split_idx["train"]], batch_size=batch_size, shuffle=True, collate_fn=collate_dgl)
+    val_loader = DataLoader(dataset[split_idx["valid"]], batch_size=batch_size, shuffle=False, collate_fn=collate_dgl)
+    test_loader = DataLoader(dataset[split_idx["test"]], batch_size=batch_size, shuffle=False, collate_fn=collate_dgl)
+
+    return train_loader, val_loader, test_loader 
+    
+
+def load_multi_graph_dataset(name: str) -> dict[str, Any]:
+    if name == 'ogbg-ppa':
+        return load_ogbg_ppa()
+    else:
+        raise AssertionError
 
 
 def load_ZINC_dataset(subset: bool) -> dict[str, Any]:
@@ -86,9 +91,19 @@ def load_ZINC_dataset(subset: bool) -> dict[str, Any]:
         val_mask = val_mask,
         test_mask = test_mask, 
     )
+    
+    
+def load_TUDataset(name: str) -> DGLDataset:
+    raise DeprecationWarning
+    dataset = TUDataset(
+        name = name, 
+        raw_dir = '/Dataset/DGL/TUDataset',
+    )
+    
+    return dataset  
 
 
-def load_TUDataset(name: str) -> dict[str, Any]:
+def load_TUDataset_old(name: str) -> dict[str, Any]:
     if name == 'MUTAG':
         dataset = TUDataset(root='/Dataset/PyG/TUDataset', name=name, use_node_attr=True, use_edge_attr=True)
         num_gs = len(dataset)
@@ -209,67 +224,52 @@ def load_ogbn_mag_hg() -> dgl.DGLHeteroGraph:
     return hg 
 
 
-def load_homo_graph_dataset(
-        name: str,
-        train_val_test_ratio: Optional[tuple[float, float, float]] = None,
-        to_bidirected: bool = True,
-        add_self_loop: bool = True) -> dgl.DGLGraph:
-    if name == 'ogbn-papers100M':
-        raise NotImplementedError
-
-    elif name == 'ogbn-arxiv':
-        assert train_val_test_ratio is None 
-        
-        pkl_path = '/Dataset/OGB/ogbn-arxiv/ogbn-arxiv.dict.pkl'
-
-        if is_file_exist(pkl_path):
-            graph_dict = pickle_load(pkl_path)
-        else:
-            g = load_ogbn_g('ogbn-arxiv')
-            graph_dict = convert_dgl_g_to_dict(g)
-            pickle_dump(graph_dict, pkl_path)
-            
-    elif name == 'ogbn-products':
-        assert train_val_test_ratio is None 
-        
-        pkl_path = '/Dataset/OGB/ogbn-products/ogbn-products.dict.pkl'
-
-        if is_file_exist(pkl_path):
-            graph_dict = pickle_load(pkl_path)
-        else:
-            g = load_ogbn_g('ogbn-products')
-            graph_dict = convert_dgl_g_to_dict(g)
-            pickle_dump(graph_dict, pkl_path)
-
+def load_homo_graph_dataset(name: str,
+                            to_bidirected: bool = True,
+                            add_self_loop: bool = True) -> dgl.DGLGraph:
+    pkl_path = f"/Dataset/GengHaoHomoGraph/{name}.dict.pkl"
+    
+    if is_file_exist(pkl_path):
+        graph_dict = pickle_load(pkl_path)
     else:
-        raise AssertionError 
+        if name == 'Cora':
+            g = load_Cora_g()
+        elif name == 'CiteSeer':
+            g = load_CiteSeer_g()
+        elif name == 'PubMed':
+            g = load_PubMed_g()
+        elif name == 'ogbn-arxiv':
+            g = load_ogbn_g('ogbn-arxiv')
+        else:
+            raise AssertionError 
+        
+        graph_dict = convert_dgl_g_to_dict(g)
+        pickle_dump(graph_dict, pkl_path)
     
     g = convert_dict_to_dgl_g(graph_dict, to_bidirected=to_bidirected, add_self_loop=add_self_loop)
         
     return g 
-    
-    
-def load_hetero_graph_dataset(
-    name: str, 
-    train_val_test_ratio: Optional[tuple[float, float, float]] = None,
-) -> dict[str, Any]:
-    if name == 'ogbn-mag':
-        assert train_val_test_ratio is None 
         
+    
+def load_hetero_graph_dataset(name: str) -> dict[str, Any]:
+    if name == 'ogbn-mag':
         hg = load_ogbn_mag_hg()
 
-        return dict(hg=hg, infer_ntype='paper')
+        return dict(
+            hg = hg, 
+            infer_ntype = 'paper',
+        )
     
     elif name == 'AMiner':
-        train_ratio, val_ratio, test_ratio = train_val_test_ratio 
-        
-        hg = load_AMiner_hg(train_ratio=train_ratio, val_ratio=val_ratio, test_ratio=test_ratio)
+        hg = load_AMiner_hg()
 
-        return dict(hg=hg, infer_ntype='author', other_infer_ntype='venue')
+        return dict(
+            hg = hg, 
+            infer_ntype = 'author', 
+            other_infer_ntype = 'venue',
+        )
     
     elif name == 'ACM':
-        assert train_val_test_ratio is None 
-        
         hg = load_ACM_dataset()
 
         return dict(
@@ -283,8 +283,6 @@ def load_hetero_graph_dataset(
         )
         
     elif name == 'DBLP':
-        assert train_val_test_ratio is None 
-        
         hg = load_DBLP_hg()
         
         return dict(
@@ -299,8 +297,6 @@ def load_hetero_graph_dataset(
         )
         
     elif name == 'IMDB':
-        assert not train_val_test_ratio 
-        
         hg = load_IMDB_hg()
         
         return dict(
@@ -314,8 +310,6 @@ def load_hetero_graph_dataset(
         )
         
     elif name == 'HGB-ACM':
-        assert train_val_test_ratio
-        
         hg = load_HGB_ACM_dataset(
             train_ratio = train_val_test_ratio[0],
             val_ratio = train_val_test_ratio[1],
@@ -641,10 +635,9 @@ def load_ACM_TransE_dataset() -> dgl.DGLHeteroGraph:
     return hg 
 
 
-def load_Planetoid_dataset(name: str,
-                           normalize_feature: bool = False) -> dgl.DGLGraph:
+def load_Planetoid_dataset(name: str) -> dgl.DGLGraph:
     dataset = Planetoid(
-        root = os.path.join(root, 'PyG/Planetoid'),
+        root = '/Dataset/PyG/Planetoid',
         name = name,
     )
     
@@ -656,9 +649,6 @@ def load_Planetoid_dataset(name: str,
     val_mask = _g.val_mask
     test_mask = _g.test_mask
     
-    if normalize_feature:
-        feat = L1_normalize(feat)
-    
     g = dgl.graph(edge_index)
     g.ndata['feat'] = feat 
     g.ndata['label'] = label
@@ -669,16 +659,16 @@ def load_Planetoid_dataset(name: str,
     return g
 
 
-def load_Cora_g(normalize_feature: bool = False) -> dgl.DGLGraph:
-    return load_Planetoid_dataset('Cora', normalize_feature=normalize_feature)
+def load_Cora_g() -> dgl.DGLGraph:
+    return load_Planetoid_dataset('Cora')
 
 
-def load_CiteSeer_g(normalize_feature: bool = False) -> dgl.DGLGraph:
-    return load_Planetoid_dataset('CiteSeer', normalize_feature=normalize_feature)
+def load_CiteSeer_g() -> dgl.DGLGraph:
+    return load_Planetoid_dataset('CiteSeer')
 
 
-def load_PubMed_g(normalize_feature: bool = False) -> dgl.DGLGraph:
-    return load_Planetoid_dataset('PubMed', normalize_feature=normalize_feature)
+def load_PubMed_g() -> dgl.DGLGraph:
+    return load_Planetoid_dataset('PubMed')
 
 
 def load_Reddit_dataset() -> dgl.DGLGraph:
@@ -922,7 +912,8 @@ def load_ogbn_mag_Metapath2Vec() -> dgl.DGLHeteroGraph:
 
 
 def load_ogbn_arxiv_g(to_bidirected: bool = True) -> dgl.DGLGraph:
-    dataset = PygNodePropPredDataset(name='ogbn-arxiv', root=os.path.join(root, 'OGB/ogbn-arxiv')) 
+    raise DeprecationWarning
+    dataset = PygNodePropPredDataset(name='ogbn-arxiv', root='/Dataset/OGB/ogbn-arxiv') 
 
     split_idx = dataset.get_idx_split()
     train_idx, valid_idx, test_idx = split_idx["train"], split_idx["valid"], split_idx["test"]

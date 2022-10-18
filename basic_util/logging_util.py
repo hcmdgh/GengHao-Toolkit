@@ -16,10 +16,8 @@ def init_log(log_path: Optional[str] = './log.log',
              stdout: bool = True):
     global _use_stdout, _log_fp
     
-    if log_path:
+    if log_path and _log_fp is None:
         _log_fp = open(log_path, 'w', encoding='utf-8')
-    else:
-        _log_fp = None 
         
     _use_stdout = stdout
 

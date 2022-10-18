@@ -86,4 +86,9 @@ class ClassificationRecorder:
             wandb.summary['best_test_acc'] = best_acc_info['best_test_acc']
             wandb.summary['best_test_acc_epoch'] = best_acc_info['best_test_acc_epoch']
 
+        if self.use_log:
+            log_info("[Summary]")
+            log_info(f"    Best Val Acc: {best_acc_info['best_val_acc']:.4f} in Epoch {best_acc_info['best_val_acc_epoch']}")
+            log_info(f"    Best Test Acc: {best_acc_info['best_test_acc']:.4f} in Epoch {best_acc_info['best_test_acc_epoch']}")
+
         return best_acc_info 
