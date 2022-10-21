@@ -5,6 +5,8 @@ __all__ = [
     'convert_dict_to_dgl_g', 
     'convert_dgl_hg_to_dict', 
     'convert_dict_to_dgl_hg', 
+    # 'dump_hg',
+    # 'load_hg',
 ]
 
 

@@ -2,7 +2,7 @@ from .imports import *
 from .dgl_util import * 
 from .bean import * 
 from .feat_util import * 
-from .convert import * 
+from .serialization import * 
 
 from basic_util import * 
 from torch_util import * 
