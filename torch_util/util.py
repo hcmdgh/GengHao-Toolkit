@@ -10,7 +10,7 @@ __all__ = [
     'to_IntTensor', 
     'to_BoolTensor',
     'seed_all',
-    'auto_set_device',
+    'auto_select_gpu',
     'set_device',
     'get_device',
     'is_on_cpu',
@@ -110,7 +110,7 @@ def seed_all(seed: int):
     dgl.random.seed(seed)
     
 
-def auto_set_device(use_gpu: bool = True) -> torch.device:
+def auto_select_gpu(use_gpu: bool = True) -> torch.device:
     global _device 
 
     if not use_gpu:

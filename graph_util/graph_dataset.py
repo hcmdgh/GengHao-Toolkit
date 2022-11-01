@@ -1,3 +1,5 @@
+raise DeprecationWarning
+
 from .imports import * 
 from .dgl_util import * 
 from .bean import * 

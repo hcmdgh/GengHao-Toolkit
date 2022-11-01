@@ -9,3 +9,4 @@ from .sparse import *
 from .recorder import * 
 from .activation import * 
 from .hash import * 
+from .scheduler import * 
