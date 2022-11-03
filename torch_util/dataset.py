@@ -49,7 +49,7 @@ def random_split_dataset_mask(total_cnt: int,
                               val_ratio: float,
                               test_ratio: float, 
                               seed: int = DEFAULT_SEED,
-                              return_numpy: bool = False) -> tuple:
+                              return_numpy: bool = True) -> tuple:
     assert math.isclose(train_ratio + val_ratio + test_ratio, 1.) 
 
     rng = default_rng(seed)

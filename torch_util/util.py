@@ -20,7 +20,7 @@ __all__ = [
     'compare_tensor', 
 ]
 
-_device = torch.device('cpu')
+_device = None 
 
 
 def compare_tensor(v1, v2):
@@ -112,6 +112,10 @@ def seed_all(seed: int):
 
 def auto_select_gpu(use_gpu: bool = True) -> torch.device:
     global _device 
+    
+    # 只设置一次device
+    if _device is not None:
+        return _device 
 
     if not use_gpu:
         _device = torch.device('cpu')
