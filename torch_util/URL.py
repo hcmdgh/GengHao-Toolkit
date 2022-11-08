@@ -12,27 +12,32 @@ __all__ = [
 def linear_classify(*,
                     train_feat: FloatTensor,
                     train_label: IntTensor,
-                    val_feat: FloatTensor,
-                    val_label: IntTensor,
+                    val_feat: Optional[FloatTensor] = None,
+                    val_label: Optional[IntTensor] = None,
                     test_feat: FloatTensor,
                     test_label: IntTensor,
                     use_gpu: bool = True, 
                     lr: float = 0.001,
                     num_epochs: int = 300,
                     use_tqdm: bool = True) -> dict[str, Any]:
+    raise DeprecationWarning
     device = auto_select_gpu(use_gpu=use_gpu)
 
     train_feat = train_feat.to(device)
     train_label = train_label.to(device)
-    val_feat = val_feat.to(device)
-    val_label = val_label.to(device)
+    if val_feat is not None and val_label is not None:
+        val_feat = val_feat.to(device)
+        val_label = val_label.to(device)
     test_feat = test_feat.to(device)
     test_label = test_label.to(device)
 
     feat_dim = train_feat.shape[-1]
 
-    label = torch.concat([train_label, val_label, test_label])
-    num_classes = len(label.unique())
+    if val_label is not None:
+        total_label = torch.concat([train_label, val_label, test_label])
+    else:
+        total_label = torch.concat([train_label, test_label])
+    num_classes = len(total_label.unique())
 
     model = nn.Linear(feat_dim, num_classes)
     model = model.to(device)
