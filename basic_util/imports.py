@@ -21,6 +21,7 @@ import re
 import yaml 
 import threading
 import sqlite3
+import traceback 
 
 # [BEGIN] 第三方常用库
 import requests
@@ -28,7 +29,6 @@ from tqdm import tqdm
 import numpy as np
 from numpy import ndarray
 import pandas as pd 
-import orjson 
 
 IntArray = FloatArray = BoolArray = ndarray
 # [END]
