@@ -1,82 +1,155 @@
-# from .imports import * 
+"""
+提供对PyTorch和SciPy的稀疏矩阵的操作。
+"""
 
-# __all__ = [
-#     'to_torch_sparse',
-#     'to_coo_mat', 
-#     'to_adj_list',
-# ]
+from .imports import * 
+
+from sklearn.preprocessing import normalize as sklearn_normalize
+
+__all__ = [
+    'convert_csr_matrix_to_csr_tensor',
+    'convert_csr_tensor_to_csr_matrix',
+    'convert_to_csr_tensor', 
+    'sparse_matmul', 
+    'L1_normalize',
+    'L2_normalize',
+]
 
 
-# def to_coo_mat(val) -> sp.coo_matrix:
-#     if isinstance(val, sp.coo_matrix):
-#         pass 
-#     elif isinstance(val, (sp.csc_matrix, sp.csr_matrix, sp.lil_matrix, sp.dia_matrix, sp.dok_matrix, sp.bsr_matrix)):
-#         val = val.tocoo() 
-#     elif isinstance(val, np.ndarray):
-#         val = sp.coo_matrix(val)
-#     elif isinstance(val, torch.Tensor):
-#         if not val.is_sparse:
-#             val = val.detach().cpu().numpy() 
-#             val = sp.coo_matrix(val)
-#         else:
-#             if not val.is_coalesced():
-#                 val = val.coalesce()
-                
-#             indices = val.indices() 
-#             values = val.values() 
-#             shape = tuple(val.shape) 
+def convert_csr_matrix_to_csr_tensor(csr_matrix: sp.csr_matrix,
+                                     device: Optional[torch.device] = None) -> SparseTensor:
+    N, M = csr_matrix.shape 
+    
+    csr_tensor = torch.sparse_csr_tensor(
+        crow_indices = csr_matrix.indptr,
+        col_indices = csr_matrix.indices,
+        values = csr_matrix.data,
+        size = [N, M],
+        dtype = torch.float32,
+        device = device, 
+    )
+    
+    return csr_tensor 
+
+
+def convert_csr_tensor_to_csr_matrix(csr_tensor: SparseTensor) -> sp.csr_matrix:
+    N, M = csr_tensor.shape 
+
+    data = csr_tensor.values().detach().cpu().numpy() 
+    indices = csr_tensor.col_indices().detach().cpu().numpy() 
+    indptr = csr_tensor.crow_indices().detach().cpu().numpy() 
+    
+    csr_matrix = sp.csr_matrix((data, indices, indptr), shape=[N, M], dtype=np.float32)
+    
+    return csr_matrix 
+
+
+def convert_to_csr_tensor(inp,
+                          device = None) -> SparseTensor:
+    if isinstance(inp, np.ndarray):
+        csr_tensor = torch.from_numpy(inp).to_sparse_csr() 
+        
+    elif isinstance(inp, sp.csr_matrix):
+        csr_tensor = convert_csr_matrix_to_csr_tensor(inp)
+        
+    elif isinstance(inp, torch.Tensor):
+        if inp.layout == torch.strided:
+            csr_tensor = inp.detach().to_sparse_csr() 
+        elif inp.layout == torch.sparse_csr:
+            csr_tensor = inp
+        else:
+            raise TypeError
             
-#             val = sp.coo_matrix((values, (indices[0], indices[1])), shape=shape) 
-#     elif isinstance(val, dgl.DGLGraph):  # 同构图
-#         edge_index = val.edges()
-#         edge_index = (edge_index[0].cpu().numpy(), edge_index[1].cpu().numpy())
-#         values = np.ones(len(edge_index[0]), dtype=np.float32)
-        
-#         val = sp.coo_matrix((values, edge_index))
-#     elif isinstance(val, dict):  # 邻接表
-#         edge_list = [] 
-        
-#         for src_nid in val:
-#             for dest_nid in val[src_nid]:
-#                 edge_list.append((src_nid, dest_nid))
-                
-#         edge_index = np.array(edge_list, dtype=np.int64).T 
-#         values = np.ones(len(edge_list), dtype=np.float32)
-        
-#         val = sp.coo_matrix((values, (edge_index[0], edge_index[1])))
-#     else:
-#         raise TypeError 
+    else:
+        raise TypeError 
     
-#     val = val.astype(np.float32)
-    
-#     return val 
+    csr_tensor = csr_tensor.to(torch.float32).to(device)
+
+    return csr_tensor 
 
 
-# def to_torch_sparse(val) -> SparseTensor:
-#     def coo_mat2torch_sparse(coo_mat: sp.coo_matrix) -> SparseTensor:
-#         indices = torch.from_numpy(np.vstack([coo_mat.row, coo_mat.col])).to(torch.int64)
-#         values = torch.from_numpy(coo_mat.data).to(torch.float32)
-#         shape = torch.Size(coo_mat.shape)
+def convert_to_csr_matrix(inp) -> sp.csr_matrix:
+    if isinstance(inp, np.ndarray):
+        csr_matrix = sp.csr_matrix(inp) 
         
-#         return torch.sparse_coo_tensor(indices, values, shape).coalesce()
+    elif isinstance(inp, sp.csr_matrix):
+        csr_matrix = inp
+        
+    elif isinstance(inp, torch.Tensor):
+        if inp.layout == torch.strided:
+            csr_matrix = sp.csr_matrix(inp.detach().cpu().numpy()) 
+        elif inp.layout == torch.sparse_csr:
+            csr_matrix = convert_csr_tensor_to_csr_matrix(inp) 
+        else:
+            raise TypeError 
+            
+    else:
+        raise TypeError 
     
-#     coo_mat = to_coo_mat(val)
+    csr_matrix = csr_matrix.astype(np.float32) 
     
-#     return coo_mat2torch_sparse(coo_mat)        
+    return csr_matrix 
 
 
-# def to_adj_list(val) -> dict[int, list[int]]:
-#     if isinstance(val, dgl.DGLGraph):
-#         val = val.adj(scipy_fmt='coo')
+def sparse_matmul(sparse_mat, 
+                  dense_mat: FloatTensor) -> FloatTensor:
+    """
+    矩阵乘法，要求左侧为稀疏矩阵，右侧为稠密矩阵。
+    """
+    csr_tensor = convert_to_csr_tensor(sparse_mat)
+    
+    assert csr_tensor.ndim == dense_mat.ndim == 2 
+    
+    result = torch.mm(csr_tensor, dense_mat)
+    
+    return result 
 
-#     coo_mat = to_coo_mat(val)
-#     assert len(coo_mat.row) == len(coo_mat.col)
+
+def _normalize(mat,
+               norm: str):
+    """
+    矩阵按行进行正则化操作。
+    支持稠密矩阵和稀疏矩阵的4种格式：ndarray, Tensor, csr_matrix, Tensor(CSR)。
+    输出格式与输入格式保持一致。
+    """
+    assert mat.ndim == 2 
     
-#     adj_list: dict[int, list[int]] = defaultdict(list)
+    if isinstance(mat, ndarray):
+        result = sklearn_normalize(mat, norm=norm).astype(np.float32)
+        return result 
     
-#     for src_nid, dest_nid in zip(coo_mat.row, coo_mat.col):
-#         src_nid, dest_nid = int(src_nid), int(dest_nid) 
-        
-#         adj_list[src_nid].append(dest_nid)
-        
-#     return adj_list 
+    elif isinstance(mat, Tensor) and mat.layout == torch.strided:
+        device = mat.device 
+        result = torch.from_numpy(
+            sklearn_normalize(
+                mat.detach().cpu().numpy(), 
+                norm = norm,
+            )
+        ).to(torch.float32).to(device) 
+        return result 
+    
+    elif isinstance(mat, sp.csr_matrix):
+        result = sklearn_normalize(mat, norm=norm).astype(np.float32)
+        return result 
+    
+    elif isinstance(mat, Tensor) and mat.layout == torch.sparse_csr:
+        device = mat.device 
+        result = convert_csr_matrix_to_csr_tensor(
+            sklearn_normalize(
+                convert_csr_tensor_to_csr_matrix(mat), 
+                norm = norm,
+            ),
+            device = device, 
+        ) 
+        return result 
+    
+    else:
+        raise TypeError 
+
+
+def L1_normalize(mat):
+    return _normalize(mat=mat, norm='l1')
+
+
+def L2_normalize(mat):
+    return _normalize(mat=mat, norm='l2')
